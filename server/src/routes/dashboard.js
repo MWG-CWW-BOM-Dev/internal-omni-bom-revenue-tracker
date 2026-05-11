@@ -61,6 +61,13 @@ router.get('/summary', async (req, res, next) => {
     const [result] = await TimesheetEntry.aggregate(pipeline);
     const fixedProjectFilters = { billingType: 'fixed', status: { $ne: 'Cancelled' } };
     if (marketId) fixedProjectFilters.marketId = marketId;
+    
+    if (req.query.startDate || req.query.endDate) {
+      fixedProjectFilters.startDate = {};
+      if (req.query.startDate) fixedProjectFilters.startDate.$gte = new Date(req.query.startDate);
+      if (req.query.endDate) fixedProjectFilters.startDate.$lte = new Date(req.query.endDate);
+    }
+
     const fixedRevenue = await Project.aggregate([
       { $match: fixedProjectFilters },
       { $group: { _id: null, total: { $sum: '$fixedBudget' } } }

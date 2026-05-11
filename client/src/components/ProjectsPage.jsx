@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 const statusOptions = ['In Pipeline', 'On Hold', 'In Progress', 'Delivered', 'Cancelled'];
 
-export default function ProjectsPage({ projects, markets, brands, summary, onCreate, onUpdate, onDelete }) {
+export default function ProjectsPage({ projects, markets, brands, summary, onCreate, onUpdate, onDelete, currencyConfig = { rate: 1, symbol: '$', code: 'USD' } }) {
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState('');
   const [form, setForm] = useState(initialForm());
@@ -12,11 +12,21 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
 
   async function submit(event) {
     event.preventDefault();
+    const newName = form.name.trim();
+    if (projects.some((p) => p.name.toLowerCase() === newName.toLowerCase())) {
+      alert(`A project with the name "${newName}" already exists.`);
+      return;
+    }
     await onCreate(payload(form));
     setForm(initialForm());
   }
 
   async function save(id) {
+    const newName = editForm.name.trim();
+    if (projects.some((p) => p._id !== id && p.name.toLowerCase() === newName.toLowerCase())) {
+      alert(`A project with the name "${newName}" already exists.`);
+      return;
+    }
     await onUpdate(id, payload(editForm));
     setEditingId('');
   }
@@ -30,7 +40,9 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
       brandId: project.brandId?._id || project.brandId || '',
       billingType: project.billingType || 'hourly',
       fixedBudget: project.fixedBudget || 0,
-      status: project.status || 'In Pipeline'
+      status: project.status || 'In Pipeline',
+      startDate: project.startDate ? new Date(project.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      endDate: project.endDate ? new Date(project.endDate).toISOString().split('T')[0] : ''
     });
   }
 
@@ -39,8 +51,8 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
       <section className="project-metrics">
         <ProjectMetric tone="purple" label="Total Projects" value={projects.length} delta="+12.5%" />
         <ProjectMetric tone="green" label="Active Projects" value={activeProjects} delta="+8.2%" />
-        <ProjectMetric tone="amber" label="Total Hours" value={`${number(summary.totalHours)}h`} delta="+10.3%" />
-        <ProjectMetric tone="red" label="Total Revenue" value={currency(summary.totalRevenue)} delta="+12.5%" />
+        <ProjectMetric tone="amber" label="Total Hours" value={`${number(summary.totalHours)}h`} delta="+10.3%" icon="h" />
+        <ProjectMetric tone="red" label="Total Revenue" value={currency(summary.totalRevenue, currencyConfig)} delta="+12.5%" icon={currencyConfig.symbol} />
       </section>
 
       <section className="project-card add-project-card">
@@ -81,6 +93,12 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
           <Field label="Fixed Budget (Optional)" wide>
             <input type="number" min="0" step="0.01" placeholder="Enter budget amount" value={form.fixedBudget} onChange={(event) => setForm({ ...form, fixedBudget: event.target.value })} />
           </Field>
+          <Field label="Start Date">
+            <input type="date" required value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} />
+          </Field>
+          <Field label="End Date (Optional)">
+            <input type="date" value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} />
+          </Field>
           <Field label="Status">
             <select value={form.status} required onChange={(event) => setForm({ ...form, status: event.target.value })}>
               {statusOptions.map((status) => (
@@ -113,6 +131,8 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
                 <th>Brand</th>
                 <th>Billing</th>
                 <th>Budget</th>
+                <th>Start Date</th>
+                <th>End Date</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -132,7 +152,9 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
                     <td>{isEditing ? <input value={editForm.pointOfContact} onChange={(event) => setEditForm({ ...editForm, pointOfContact: event.target.value })} /> : project.pointOfContact || '-'}</td>
                     <td>{isEditing ? <BrandSelect value={editForm.brandId} brands={brands} onChange={(brandId) => setEditForm({ ...editForm, brandId })} /> : project.brandId?.name || '-'}</td>
                     <td>{isEditing ? <BillingToggle value={editForm.billingType} onChange={(billingType) => setEditForm({ ...editForm, billingType })} compact /> : <span className="billing-pill">{project.billingType === 'fixed' ? 'Fixed Budget' : 'Hourly Based'}</span>}</td>
-                    <td>{isEditing ? <input type="number" min="0" step="0.01" value={editForm.fixedBudget} onChange={(event) => setEditForm({ ...editForm, fixedBudget: event.target.value })} /> : currency(project.fixedBudget || 0)}</td>
+                    <td>{isEditing ? <input type="number" min="0" step="0.01" value={editForm.fixedBudget} onChange={(event) => setEditForm({ ...editForm, fixedBudget: event.target.value })} /> : currency(project.fixedBudget || 0, currencyConfig)}</td>
+                    <td>{isEditing ? <input type="date" value={editForm.startDate} required onChange={(event) => setEditForm({ ...editForm, startDate: event.target.value })} /> : (project.startDate ? new Date(project.startDate).toLocaleDateString() : '-')}</td>
+                    <td>{isEditing ? <input type="date" value={editForm.endDate} onChange={(event) => setEditForm({ ...editForm, endDate: event.target.value })} /> : (project.endDate ? new Date(project.endDate).toLocaleDateString() : '-')}</td>
                     <td>{isEditing ? <StatusSelect value={editForm.status} onChange={(status) => setEditForm({ ...editForm, status })} /> : <StatusBadge status={project.status} />}</td>
                     <td>
                       <div className="project-actions">
@@ -161,10 +183,10 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
   );
 }
 
-function ProjectMetric({ tone, label, value, delta }) {
+function ProjectMetric({ tone, label, value, delta, icon = 'P' }) {
   return (
     <div className={`project-metric ${tone}`}>
-      <span className="project-metric-icon">P</span>
+      <span className="project-metric-icon">{icon}</span>
       <div>
         <span>{label}</span>
         <strong>{value}</strong>
@@ -222,7 +244,8 @@ function StatusBadge({ status = 'In Pipeline' }) {
 }
 
 function initialForm() {
-  return { name: '', pointOfContact: '', marketId: '', brandId: '', billingType: 'hourly', fixedBudget: 0, status: 'In Pipeline' };
+  const today = new Date().toISOString().split('T')[0];
+  return { name: '', pointOfContact: '', marketId: '', brandId: '', billingType: 'hourly', fixedBudget: 0, status: 'In Pipeline', startDate: today, endDate: '' };
 }
 
 function payload(form) {
@@ -233,12 +256,15 @@ function payload(form) {
     brandId: form.brandId || null,
     billingType: form.billingType,
     fixedBudget: Number(form.fixedBudget || 0),
+    startDate: form.startDate,
+    endDate: form.endDate || null,
     status: form.status
   };
 }
 
-function currency(value) {
-  return Number(value || 0).toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+function currency(value, config) {
+  const converted = Number(value || 0) * config.rate;
+  return new Intl.NumberFormat(config.locale || undefined, { style: 'currency', currency: config.code || 'USD', maximumFractionDigits: 0 }).format(converted);
 }
 
 function number(value) {

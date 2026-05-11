@@ -80,6 +80,18 @@ export default function App() {
     await loadDashboard();
   }
 
+  const [activeCurrency, setActiveCurrency] = useState('USD');
+  const CURRENCY_RATES = { USD: 1, INR: 83, CAD: 1.35 };
+  const CURRENCY_SYMBOLS = { USD: '$', INR: '₹', CAD: 'C$' };
+  const CURRENCY_LOCALES = { USD: 'en-US', INR: 'en-IN', CAD: 'en-CA' };
+
+  const currencyConfig = {
+    code: activeCurrency,
+    rate: CURRENCY_RATES[activeCurrency],
+    symbol: CURRENCY_SYMBOLS[activeCurrency],
+    locale: CURRENCY_LOCALES[activeCurrency]
+  };
+
   const filteredResources = filters.marketId
     ? resources.filter((resource) => idValue(resource.marketId) === filters.marketId)
     : resources;
@@ -97,19 +109,21 @@ export default function App() {
   const pages = {
     dashboard: {
       label: 'Dashboard',
-      content: <Dashboard summary={summary} resources={filteredResources} projects={filteredProjects} />
+      content: <Dashboard summary={summary} resources={filteredResources} projects={filteredProjects} filters={filters} showAnalytics={true} currencyConfig={currencyConfig} />
     },
     timesheet: {
       label: 'Timesheet',
       content: (
         <>
-          <Dashboard summary={summary} resources={filteredResources} projects={filteredProjects} />
+          <Dashboard summary={summary} resources={filteredResources} projects={filteredProjects} filters={filters} currencyConfig={currencyConfig} />
           <TimesheetForm
             resources={filteredResources}
             projects={filteredProjects}
             timesheets={filteredTimesheets}
             dates={calendarDates}
+            currencyConfig={currencyConfig}
             onCreate={(body) => create('/timesheets', body)}
+            onUpdate={(id, body) => update('/timesheets', id, body)}
             onDelete={(id) => remove('/timesheets', id)}
           />
         </>
@@ -152,6 +166,7 @@ export default function App() {
           markets={markets}
           brands={brands}
           summary={summary}
+          currencyConfig={currencyConfig}
           onCreate={(body) => create('/projects', body)}
           onUpdate={(id, body) => update('/projects', id, body)}
           onDelete={(id) => remove('/projects', id)}
@@ -166,18 +181,19 @@ export default function App() {
           fields={[
             { name: 'name', label: 'Resource name', tableLabel: 'Name', required: true },
             { name: 'designation', label: 'Designation', tableLabel: 'Designation', required: true },
-            { name: 'photoUrl', label: 'Profile photo URL', tableLabel: 'Photo URL', optional: true },
-            { name: 'hourlyRate', label: 'Hourly rate', tableLabel: 'Hourly Rate', type: 'number', min: '0', step: '0.01', required: true },
+            { name: 'photoUrl', label: 'Profile Photo', tableLabel: 'Photo', type: 'image', optional: true },
+            { name: 'hourlyRate', label: 'Base Hourly Rate', tableLabel: 'Base Rate', type: 'number', min: '0', step: '0.01', required: true },
+            { name: 'marketId', label: 'Default Market', tableLabel: 'Default Market', type: 'select', options: markets, required: true },
             {
               name: 'marketRates',
-              label: 'Market rates JSON',
+              label: 'Market specific rates',
               tableLabel: 'Market Rates',
-              type: 'json',
-              defaultValue: '[]',
+              type: 'market-rates',
+              options: markets,
+              defaultValue: [],
               optional: true,
-              format: (rates) => formatMarketRates(rates, markets)
-            },
-            { name: 'marketId', label: 'Market', tableLabel: 'Market', type: 'select', options: markets, required: true }
+              format: (rates) => formatMarketRates(rates, markets, currencyConfig)
+            }
           ]}
           items={resources}
           onCreate={(body) => create('/resources', body)}
@@ -191,23 +207,37 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand-block">
-          <span className="brand-mark">O</span>
-          <h1>Revenue Tracker</h1>
-          <p>Timesheets & Revenue</p>
+        <div>
+          <div className="brand-block">
+            <span className="brand-mark">O</span>
+            <h1>Revenue Tracker</h1>
+            <p>Timesheets & Revenue</p>
+          </div>
+          <nav>
+            {Object.entries(pages).map(([key, page]) => (
+              <button
+                className={activePage === key ? 'nav-item active' : 'nav-item'}
+                key={key}
+                type="button"
+                onClick={() => setActivePage(key)}
+              >
+                {page.label}
+              </button>
+            ))}
+          </nav>
         </div>
-        <nav>
-          {Object.entries(pages).map(([key, page]) => (
-            <button
-              className={activePage === key ? 'nav-item active' : 'nav-item'}
-              key={key}
-              type="button"
-              onClick={() => setActivePage(key)}
-            >
-              {page.label}
-            </button>
-          ))}
-        </nav>
+        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label style={{ fontSize: '11px', color: '#aab3c2', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.05em' }}>Currency</label>
+          <select 
+            value={activeCurrency} 
+            onChange={(e) => setActiveCurrency(e.target.value)}
+            style={{ padding: '10px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.2)', outline: 'none' }}
+          >
+            <option value="USD" style={{color: 'black'}}>USD ($)</option>
+            <option value="INR" style={{color: 'black'}}>INR (₹)</option>
+            <option value="CAD" style={{color: 'black'}}>CAD (C$)</option>
+          </select>
+        </div>
       </aside>
 
       <main>
@@ -345,12 +375,12 @@ function idValue(value) {
   return typeof value === 'string' ? value : value._id || String(value);
 }
 
-function formatMarketRates(rates = [], markets = []) {
+function formatMarketRates(rates = [], markets = [], config = { rate: 1, symbol: '$', locale: 'en-US' }) {
   if (!rates.length) return '-';
   return rates
     .map((rate) => {
       const market = markets.find((item) => item._id === idValue(rate.marketId));
-      return `${market?.name || 'Market'}: ${Number(rate.hourlyRate || 0).toLocaleString()}`;
+      return `${market?.name || 'Market'}: ${config.symbol}${Number((rate.hourlyRate || 0) * config.rate).toLocaleString(config.locale || undefined, { maximumFractionDigits: 0 })}`;
     })
     .join(', ');
 }

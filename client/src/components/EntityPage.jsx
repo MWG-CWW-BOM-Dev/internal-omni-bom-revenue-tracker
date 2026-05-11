@@ -142,6 +142,67 @@ function FieldControl({ field, value, onChange, compact = false }) {
     );
   }
 
+  if (field.type === 'image') {
+    const handleFile = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const res = await fetch('http://localhost:5000/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: reader.result })
+          });
+          const data = await res.json();
+          if (data.url) onChange(data.url);
+        } catch (err) {
+          console.error('Failed to upload image', err);
+        }
+      };
+      reader.readAsDataURL(file);
+    };
+
+    return (
+      <div className={compact ? 'compact-field' : ''} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {value && <img src={value} alt="Preview" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />}
+        <input type="file" accept="image/*" onChange={handleFile} />
+      </div>
+    );
+  }
+
+  if (field.type === 'market-rates') {
+    const rates = Array.isArray(value) ? value : [];
+    return (
+      <div className={compact ? 'compact-field market-rates-field' : 'market-rates-field'} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <span style={{ fontSize: '12px', color: '#aab3c2' }}>Set specific rate per market</span>
+        {field.options.map((market) => {
+          const rateObj = rates.find(r => r.marketId === market._id || r.marketId?._id === market._id) || { marketId: market._id, hourlyRate: '' };
+          return (
+            <div key={market._id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ minWidth: '80px', fontSize: '12px' }}>{market.name}</span>
+              <input 
+                type="number" 
+                min="0" 
+                step="0.01" 
+                placeholder="Rate" 
+                style={{ width: '100px', padding: '4px 8px' }}
+                value={rateObj.hourlyRate} 
+                onChange={(e) => {
+                  const newRates = [...rates.filter(r => r.marketId !== market._id && r.marketId?._id !== market._id)];
+                  if (e.target.value !== '') {
+                    newRates.push({ marketId: market._id, hourlyRate: Number(e.target.value) });
+                  }
+                  onChange(newRates);
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   if (field.type === 'select') {
     return (
       <select className={compact ? 'compact-field' : ''} value={value || ''} required={field.required} onChange={(event) => onChange(event.target.value)}>
@@ -178,6 +239,7 @@ function itemToForm(item, fields) {
     fields.map((field) => {
       const value = item[field.name];
       if (field.type === 'json') return [field.name, JSON.stringify(value || [], null, 2)];
+      if (field.type === 'market-rates') return [field.name, value || []];
       return [field.name, value?._id || value || field.defaultValue || ''];
     })
   );
@@ -187,6 +249,10 @@ function cleanPayload(form, fields) {
   return fields.reduce((payload, field) => {
     if (field.type === 'json') {
       payload[field.name] = form[field.name] ? JSON.parse(form[field.name]) : [];
+      return payload;
+    }
+    if (field.type === 'market-rates') {
+      payload[field.name] = form[field.name] || [];
       return payload;
     }
     if (field.optional && !form[field.name]) {
@@ -204,6 +270,7 @@ function displayValue(item, field) {
   if (field.type === 'select') return value?.name || '-';
   if (field.type === 'number') return Number(value || 0).toLocaleString();
   if (field.type === 'radio') return field.options.find((option) => option.value === value)?.label || value || '-';
-  if (field.type === 'json') return field.format ? field.format(value) : JSON.stringify(value || []);
+  if (field.type === 'json' || field.type === 'market-rates') return field.format ? field.format(value) : JSON.stringify(value || []);
+  if (field.type === 'image') return value ? <img src={value} alt="Profile" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} /> : '-';
   return value || '-';
 }

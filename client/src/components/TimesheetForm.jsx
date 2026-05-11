@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function TimesheetForm({ resources, projects, timesheets, dates, onCreate, onDelete }) {
+export default function TimesheetForm({ resources, projects, timesheets, dates, onCreate, onUpdate, onDelete, currencyConfig = { rate: 1, symbol: '$', code: 'USD' } }) {
   const [search, setSearch] = useState('');
   const [selectedCell, setSelectedCell] = useState(null);
   const [form, setForm] = useState({ projectId: '', hoursWorked: '' });
@@ -8,19 +8,29 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
     `${resource.name} ${resource.designation || ''}`.toLowerCase().includes(search.toLowerCase())
   );
 
-  function openCell(resource, date) {
-    setSelectedCell({ resource, date });
-    setForm({ projectId: '', hoursWorked: '' });
+  function openCell(resource, date, entry = null) {
+    if (entry) {
+      setSelectedCell({ resource, date, entryId: entry._id });
+      setForm({ projectId: entry.projectId?._id || entry.projectId, hoursWorked: entry.hoursWorked });
+    } else {
+      setSelectedCell({ resource, date });
+      setForm({ projectId: '', hoursWorked: '' });
+    }
   }
 
   async function submit(event) {
     event.preventDefault();
-    await onCreate({
+    const payload = {
       date: selectedCell.date,
       resourceId: selectedCell.resource._id,
       projectId: form.projectId,
       hoursWorked: form.hoursWorked
-    });
+    };
+    if (selectedCell.entryId) {
+      await onUpdate(selectedCell.entryId, payload);
+    } else {
+      await onCreate(payload);
+    }
     setSelectedCell(null);
     setForm({ projectId: '', hoursWorked: '' });
   }
@@ -50,7 +60,7 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
               <div>
                 <strong>{resource.name}</strong>
                 <span>{resource.designation || 'Resource'}</span>
-                <small>${Number(displayRate(resource, projects) || 0).toLocaleString()} / hr</small>
+                <small>{currencyConfig.symbol}{Number((displayRate(resource, projects) || 0) * currencyConfig.rate).toLocaleString(currencyConfig.locale || undefined, { maximumFractionDigits: 0 })} / hr</small>
               </div>
             </div>
             {dates.map((date) => {
@@ -58,7 +68,11 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
               return (
                 <div className="schedule-cell" key={`${resource._id}-${date}`} role="button" tabIndex={0} onClick={() => openCell(resource, date)}>
                   {entries.map((entry) => (
-                    <span className={`time-block ${colorClass(entry.projectId?.name)}`} key={entry._id}>
+                    <span className={`time-block ${colorClass(entry.projectId?.name)}`} key={entry._id} onClick={(event) => { event.stopPropagation(); openCell(resource, date, entry); }}>
+                      <div className="custom-tooltip">
+                        Project: {entry.projectId?.name}<br />
+                        Hours: {entry.hoursWorked}h/day
+                      </div>
                       <button
                         className="delete-time"
                         type="button"
@@ -87,7 +101,7 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
             <div className="section-head">
               <div>
                 <span className="eyebrow">{formatDate(selectedCell.date)}</span>
-                <h2>Add Time</h2>
+                <h2>{selectedCell.entryId ? 'Edit Time' : 'Add Time'}</h2>
                 <p>{selectedCell.resource.name}</p>
               </div>
               <button className="secondary icon-button" type="button" onClick={() => setSelectedCell(null)}>
@@ -155,7 +169,11 @@ function weekday(date) {
 }
 
 function day(date) {
-  return new Date(`${date}T00:00:00`).getDate();
+  const d = new Date(`${date}T00:00:00`);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
 }
 
 function formatDate(date) {

@@ -13,6 +13,8 @@ const projectSchema = new mongoose.Schema(
       required: true
     },
     fixedBudget: { type: Number, default: 0, min: 0 },
+    startDate: { type: Date, required: true },
+    endDate: { type: Date },
     status: {
       type: String,
       enum: ['In Pipeline', 'On Hold', 'In Progress', 'Delivered', 'Cancelled'],
