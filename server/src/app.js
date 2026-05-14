@@ -6,6 +6,7 @@ import marketRoutes from './routes/markets.js';
 import projectRoutes from './routes/projects.js';
 import resourceRoutes from './routes/resources.js';
 import timesheetRoutes from './routes/timesheets.js';
+import projectRequestRoutes from './routes/projectRequests.js';
 
 import fs from 'fs';
 import path from 'path';
@@ -53,6 +54,7 @@ app.get('/health', (_req, res) => {
 app.use('/markets', marketRoutes);
 app.use('/brands', brandRoutes);
 app.use('/projects', projectRoutes);
+app.use('/project-requests', projectRequestRoutes);
 app.use('/resources', resourceRoutes);
 app.use('/timesheets', timesheetRoutes);
 app.use('/dashboard', dashboardRoutes);

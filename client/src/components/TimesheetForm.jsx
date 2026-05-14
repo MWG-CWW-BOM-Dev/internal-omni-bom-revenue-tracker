@@ -3,7 +3,9 @@ import React, { useState } from 'react';
 export default function TimesheetForm({ resources, projects, timesheets, dates, onCreate, onUpdate, onDelete, currencyConfig = { rate: 1, symbol: '$', code: 'USD' } }) {
   const [search, setSearch] = useState('');
   const [selectedCell, setSelectedCell] = useState(null);
-  const [form, setForm] = useState({ projectId: '', hoursWorked: '' });
+  const [form, setForm] = useState({ projectId: '', hoursWorked: '', comments: '' });
+  const [dragContext, setDragContext] = useState(null);
+  
   const filteredResources = resources.filter((resource) =>
     `${resource.name} ${resource.designation || ''}`.toLowerCase().includes(search.toLowerCase())
   );
@@ -11,10 +13,10 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
   function openCell(resource, date, entry = null) {
     if (entry) {
       setSelectedCell({ resource, date, entryId: entry._id });
-      setForm({ projectId: entry.projectId?._id || entry.projectId, hoursWorked: entry.hoursWorked });
+      setForm({ projectId: entry.projectId?._id || entry.projectId, hoursWorked: entry.hoursWorked, comments: entry.comments || '' });
     } else {
       setSelectedCell({ resource, date });
-      setForm({ projectId: '', hoursWorked: '' });
+      setForm({ projectId: '', hoursWorked: '', comments: '' });
     }
   }
 
@@ -24,7 +26,8 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
       date: selectedCell.date,
       resourceId: selectedCell.resource._id,
       projectId: form.projectId,
-      hoursWorked: form.hoursWorked
+      hoursWorked: form.hoursWorked,
+      comments: form.comments
     };
     if (selectedCell.entryId) {
       await onUpdate(selectedCell.entryId, payload);
@@ -32,7 +35,56 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
       await onCreate(payload);
     }
     setSelectedCell(null);
-    setForm({ projectId: '', hoursWorked: '' });
+    setForm({ projectId: '', hoursWorked: '', comments: '' });
+  }
+
+  function handleDragStart(e, entry, date, resourceId) {
+    e.dataTransfer.effectAllowed = 'copy';
+    // Create a tiny transparent image for the drag image so it doesn't show the whole block
+    const img = new Image();
+    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    e.dataTransfer.setDragImage(img, 0, 0);
+
+    setDragContext({
+      sourceEntry: entry,
+      resourceId: resourceId,
+      startIndex: dates.indexOf(date),
+      currentHoverIndex: dates.indexOf(date)
+    });
+  }
+
+  function handleDragOver(e, date, resourceId) {
+    e.preventDefault(); // Necessary to allow dropping
+    e.dataTransfer.dropEffect = 'copy';
+    
+    if (dragContext && dragContext.resourceId === resourceId) {
+      const hoverIndex = dates.indexOf(date);
+      if (hoverIndex !== dragContext.currentHoverIndex) {
+        setDragContext({ ...dragContext, currentHoverIndex: hoverIndex });
+      }
+    }
+  }
+
+  async function handleDrop(e, date, resourceId) {
+    e.preventDefault();
+    if (!dragContext || dragContext.resourceId !== resourceId) {
+      setDragContext(null);
+      return;
+    }
+
+    const dropIndex = dates.indexOf(date);
+    if (dropIndex > dragContext.startIndex) {
+      const datesToFill = dates.slice(dragContext.startIndex + 1, dropIndex + 1);
+      const payloads = datesToFill.map(d => ({
+        date: d,
+        resourceId: dragContext.resourceId,
+        projectId: dragContext.sourceEntry.projectId?._id || dragContext.sourceEntry.projectId,
+        hoursWorked: dragContext.sourceEntry.hoursWorked,
+        comments: dragContext.sourceEntry.comments
+      }));
+      await onCreate(payloads);
+    }
+    setDragContext(null);
   }
 
   return (
@@ -60,18 +112,33 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
               <div>
                 <strong>{resource.name}</strong>
                 <span>{resource.designation || 'Resource'}</span>
-                <small>{currencyConfig.symbol}{Number((displayRate(resource, projects) || 0) * currencyConfig.rate).toLocaleString(currencyConfig.locale || undefined, { maximumFractionDigits: 0 })} / hr</small>
+                <small>{currencyConfig.symbol}{Number((displayRate(resource, projects) || 0) * currencyConfig.rate).toLocaleString(currencyConfig.locale || undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} / hr</small>
               </div>
             </div>
             {dates.map((date) => {
               const entries = entriesFor(timesheets, resource._id, date);
+              const dateIndex = dates.indexOf(date);
+              const isDragTarget = dragContext && 
+                                   dragContext.resourceId === resource._id && 
+                                   dateIndex > dragContext.startIndex && 
+                                   dateIndex <= dragContext.currentHoverIndex;
               return (
-                <div className="schedule-cell" key={`${resource._id}-${date}`} role="button" tabIndex={0} onClick={() => openCell(resource, date)}>
+                <div 
+                  className={`schedule-cell ${isDragTarget ? 'drag-target' : ''}`} 
+                  key={`${resource._id}-${date}`} 
+                  role="button" 
+                  tabIndex={0} 
+                  onClick={() => openCell(resource, date)}
+                  onDragOver={(e) => handleDragOver(e, date, resource._id)}
+                  onDrop={(e) => handleDrop(e, date, resource._id)}
+                  onDragEnter={(e) => e.preventDefault()}
+                >
                   {entries.map((entry) => (
                     <span className={`time-block ${colorClass(entry.projectId?.name)}`} key={entry._id} onClick={(event) => { event.stopPropagation(); openCell(resource, date, entry); }}>
                       <div className="custom-tooltip">
                         Project: {entry.projectId?.name}<br />
-                        Hours: {entry.hoursWorked}h/day
+                        Hours: {entry.hoursWorked}h/day<br />
+                        {entry.comments && <span>Comments: {entry.comments}</span>}
                       </div>
                       <button
                         className="delete-time"
@@ -86,6 +153,14 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
                       </button>
                       <strong>{entry.projectId?.name}</strong>
                       <small>{entry.hoursWorked}h per day</small>
+                      <div 
+                        className="drag-handle" 
+                        draggable 
+                        onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, entry, date, resource._id); }}
+                        onDragEnd={() => setDragContext(null)}
+                        onClick={(e) => e.stopPropagation()}
+                        title="Drag to copy to next days"
+                      />
                     </span>
                   ))}
                 </div>
@@ -127,6 +202,13 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
                 required
                 onChange={(event) => setForm({ ...form, hoursWorked: event.target.value })}
               />
+              <textarea
+                placeholder="Comments (optional)"
+                value={form.comments}
+                onChange={(event) => setForm({ ...form, comments: event.target.value })}
+                rows="3"
+                style={{ width: '100%', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', outline: 'none', resize: 'vertical' }}
+              ></textarea>
               <button type="submit">Save Time</button>
             </form>
           </div>

@@ -3,6 +3,7 @@ import Dashboard from './components/Dashboard.jsx';
 import EntityPage from './components/EntityPage.jsx';
 import ProjectsPage from './components/ProjectsPage.jsx';
 import TimesheetForm from './components/TimesheetForm.jsx';
+import BudgetTracker from './components/BudgetTracker.jsx';
 import { api } from './services/api.js';
 
 const emptySummary = {
@@ -62,6 +63,16 @@ export default function App() {
     loadDashboard();
   }, [filters]);
 
+  useEffect(() => {
+    window.reloadApp = async () => {
+      await loadAll();
+      await loadDashboard();
+    };
+    return () => {
+      delete window.reloadApp;
+    };
+  }, [filters]);
+
   async function create(path, body) {
     await api.create(path, body);
     await loadAll();
@@ -81,13 +92,33 @@ export default function App() {
   }
 
   const [activeCurrency, setActiveCurrency] = useState('USD');
-  const CURRENCY_RATES = { USD: 1, INR: 83, CAD: 1.35 };
+  const [currencyRates, setCurrencyRates] = useState({ USD: 1, INR: 83, CAD: 1.35 });
+  
+  useEffect(() => {
+    async function fetchRates() {
+      try {
+        const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+        const data = await response.json();
+        if (data && data.rates) {
+          setCurrencyRates({
+            USD: 1,
+            INR: data.rates.INR || 83,
+            CAD: data.rates.CAD || 1.35
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch live currency rates:', err);
+      }
+    }
+    fetchRates();
+  }, []);
+
   const CURRENCY_SYMBOLS = { USD: '$', INR: '₹', CAD: 'C$' };
   const CURRENCY_LOCALES = { USD: 'en-US', INR: 'en-IN', CAD: 'en-CA' };
 
   const currencyConfig = {
     code: activeCurrency,
-    rate: CURRENCY_RATES[activeCurrency],
+    rate: currencyRates[activeCurrency],
     symbol: CURRENCY_SYMBOLS[activeCurrency],
     locale: CURRENCY_LOCALES[activeCurrency]
   };
@@ -172,6 +203,10 @@ export default function App() {
           onDelete={(id) => remove('/projects', id)}
         />
       )
+    },
+    budget: {
+      label: 'Budget Tracker',
+      content: <BudgetTracker projects={projects} currencyConfig={currencyConfig} currency={(val, config) => new Intl.NumberFormat(config.locale || undefined, { style: 'currency', currency: config.code || 'USD', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(val || 0) * config.rate)} api={api} />
     },
     resources: {
       label: 'Resources',
@@ -380,7 +415,7 @@ function formatMarketRates(rates = [], markets = [], config = { rate: 1, symbol:
   return rates
     .map((rate) => {
       const market = markets.find((item) => item._id === idValue(rate.marketId));
-      return `${market?.name || 'Market'}: ${config.symbol}${Number((rate.hourlyRate || 0) * config.rate).toLocaleString(config.locale || undefined, { maximumFractionDigits: 0 })}`;
+      return `${market?.name || 'Market'}: ${config.symbol}${Number((rate.hourlyRate || 0) * config.rate).toLocaleString(config.locale || undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
     })
     .join(', ');
 }

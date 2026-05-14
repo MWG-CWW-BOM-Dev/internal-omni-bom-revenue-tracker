@@ -6,7 +6,8 @@ const timesheetEntrySchema = new mongoose.Schema(
     resourceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Resource', required: true },
     projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
     hoursWorked: { type: Number, required: true, min: 0 },
-    revenue: { type: Number, required: true, min: 0 }
+    revenue: { type: Number, required: true, min: 0 },
+    comments: { type: String, default: '' }
   },
   { timestamps: true }
 );

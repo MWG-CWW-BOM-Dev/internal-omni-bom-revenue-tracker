@@ -20,7 +20,11 @@ const projectSchema = new mongoose.Schema(
       enum: ['In Pipeline', 'On Hold', 'In Progress', 'Delivered', 'Cancelled'],
       default: 'In Pipeline',
       required: true
-    }
+    },
+    totalBudget: { type: Number, default: 0, min: 0 },
+    consumedBudget: { type: Number, default: 0, min: 0 },
+    remainingBudget: { type: Number, default: 0 },
+    quarterlyBilledAmount: { type: Number, default: 0, min: 0 }
   },
   { timestamps: true }
 );

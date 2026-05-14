@@ -28,14 +28,21 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const resource = await Resource.findById(req.body.resourceId);
-    if (!resource) return res.status(400).json({ message: 'Resource not found' });
-    const project = await Project.findById(req.body.projectId);
-    if (!project) return res.status(400).json({ message: 'Project not found' });
+    const bodies = Array.isArray(req.body) ? req.body : [req.body];
+    const createdEntries = [];
 
-    const revenue = revenueForEntry(project, resource, req.body.hoursWorked);
-    const entry = await TimesheetEntry.create({ ...req.body, revenue });
-    res.status(201).json(await entry.populate(populate));
+    for (const body of bodies) {
+      const resource = await Resource.findById(body.resourceId);
+      if (!resource) return res.status(400).json({ message: 'Resource not found' });
+      const project = await Project.findById(body.projectId);
+      if (!project) return res.status(400).json({ message: 'Project not found' });
+
+      const revenue = revenueForEntry(project, resource, body.hoursWorked);
+      const entry = await TimesheetEntry.create({ ...body, revenue });
+      createdEntries.push(await entry.populate(populate));
+    }
+
+    res.status(201).json(Array.isArray(req.body) ? createdEntries : createdEntries[0]);
   } catch (error) {
     next(error);
   }

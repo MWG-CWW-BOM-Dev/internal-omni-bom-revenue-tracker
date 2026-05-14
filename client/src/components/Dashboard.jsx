@@ -153,7 +153,7 @@ export default function Dashboard({ summary, resources, projects, filters, showA
 
 function currency(value, config) {
   const converted = Number(value || 0) * config.rate;
-  return new Intl.NumberFormat(config.locale || undefined, { style: 'currency', currency: config.code || 'USD', maximumFractionDigits: 0 }).format(converted);
+  return new Intl.NumberFormat(config.locale || undefined, { style: 'currency', currency: config.code || 'USD', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(converted);
 }
 
 function number(value) {

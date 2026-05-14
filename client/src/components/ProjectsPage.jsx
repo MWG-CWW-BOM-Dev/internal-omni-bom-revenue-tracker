@@ -40,6 +40,7 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
       brandId: project.brandId?._id || project.brandId || '',
       billingType: project.billingType || 'hourly',
       fixedBudget: project.fixedBudget || 0,
+      totalBudget: project.totalBudget || 0,
       status: project.status || 'In Pipeline',
       startDate: project.startDate ? new Date(project.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       endDate: project.endDate ? new Date(project.endDate).toISOString().split('T')[0] : ''
@@ -93,6 +94,9 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
           <Field label="Fixed Budget (Optional)" wide>
             <input type="number" min="0" step="0.01" placeholder="Enter budget amount" value={form.fixedBudget} onChange={(event) => setForm({ ...form, fixedBudget: event.target.value })} />
           </Field>
+          <Field label="Total Approved Budget" wide>
+            <input type="number" min="0" step="0.01" placeholder="Enter total approved budget" value={form.totalBudget} onChange={(event) => setForm({ ...form, totalBudget: event.target.value })} />
+          </Field>
           <Field label="Start Date">
             <input type="date" required value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} />
           </Field>
@@ -130,7 +134,8 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
                 <th>Point of Contact</th>
                 <th>Brand</th>
                 <th>Billing</th>
-                <th>Budget</th>
+                <th>Fixed Budget</th>
+                <th>Total Budget</th>
                 <th>Start Date</th>
                 <th>End Date</th>
                 <th>Status</th>
@@ -153,6 +158,7 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
                     <td>{isEditing ? <BrandSelect value={editForm.brandId} brands={brands} onChange={(brandId) => setEditForm({ ...editForm, brandId })} /> : project.brandId?.name || '-'}</td>
                     <td>{isEditing ? <BillingToggle value={editForm.billingType} onChange={(billingType) => setEditForm({ ...editForm, billingType })} compact /> : <span className="billing-pill">{project.billingType === 'fixed' ? 'Fixed Budget' : 'Hourly Based'}</span>}</td>
                     <td>{isEditing ? <input type="number" min="0" step="0.01" value={editForm.fixedBudget} onChange={(event) => setEditForm({ ...editForm, fixedBudget: event.target.value })} /> : currency(project.fixedBudget || 0, currencyConfig)}</td>
+                    <td>{isEditing ? <input type="number" min="0" step="0.01" value={editForm.totalBudget || 0} onChange={(event) => setEditForm({ ...editForm, totalBudget: event.target.value })} /> : currency(project.totalBudget || 0, currencyConfig)}</td>
                     <td>{isEditing ? <input type="date" value={editForm.startDate} required onChange={(event) => setEditForm({ ...editForm, startDate: event.target.value })} /> : (project.startDate ? new Date(project.startDate).toLocaleDateString() : '-')}</td>
                     <td>{isEditing ? <input type="date" value={editForm.endDate} onChange={(event) => setEditForm({ ...editForm, endDate: event.target.value })} /> : (project.endDate ? new Date(project.endDate).toLocaleDateString() : '-')}</td>
                     <td>{isEditing ? <StatusSelect value={editForm.status} onChange={(status) => setEditForm({ ...editForm, status })} /> : <StatusBadge status={project.status} />}</td>
@@ -245,7 +251,7 @@ function StatusBadge({ status = 'In Pipeline' }) {
 
 function initialForm() {
   const today = new Date().toISOString().split('T')[0];
-  return { name: '', pointOfContact: '', marketId: '', brandId: '', billingType: 'hourly', fixedBudget: 0, status: 'In Pipeline', startDate: today, endDate: '' };
+  return { name: '', pointOfContact: '', marketId: '', brandId: '', billingType: 'hourly', fixedBudget: 0, totalBudget: 0, status: 'In Pipeline', startDate: today, endDate: '' };
 }
 
 function payload(form) {
@@ -256,6 +262,7 @@ function payload(form) {
     brandId: form.brandId || null,
     billingType: form.billingType,
     fixedBudget: Number(form.fixedBudget || 0),
+    totalBudget: Number(form.totalBudget || 0),
     startDate: form.startDate,
     endDate: form.endDate || null,
     status: form.status
@@ -264,7 +271,7 @@ function payload(form) {
 
 function currency(value, config) {
   const converted = Number(value || 0) * config.rate;
-  return new Intl.NumberFormat(config.locale || undefined, { style: 'currency', currency: config.code || 'USD', maximumFractionDigits: 0 }).format(converted);
+  return new Intl.NumberFormat(config.locale || undefined, { style: 'currency', currency: config.code || 'USD', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(converted);
 }
 
 function number(value) {
