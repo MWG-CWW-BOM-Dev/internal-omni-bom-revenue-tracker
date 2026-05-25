@@ -2,7 +2,8 @@ import mongoose from 'mongoose';
 
 const marketSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, trim: true, unique: true }
+    name: { type: String, required: true, trim: true, unique: true },
+    flag: { type: String, trim: true }
   },
   { timestamps: true }
 );

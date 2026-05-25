@@ -1,4 +1,18 @@
 import React, { useEffect, useState } from 'react';
+import CustomSelect from './CustomSelect.jsx';
+import { 
+  Coins, 
+  Clock, 
+  TrendingUp, 
+  Plus, 
+  Check, 
+  X, 
+  Edit2, 
+  Trash2, 
+  Briefcase, 
+  FileText,
+  DollarSign
+} from 'lucide-react';
 
 export default function BudgetTracker({ projects, currencyConfig, currency, api }) {
   const [selectedProjectId, setSelectedProjectId] = useState('');
@@ -90,59 +104,92 @@ export default function BudgetTracker({ projects, currencyConfig, currency, api 
   const fmt = (val) => currency(val, currencyConfig);
 
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+      
+      {/* Project Selector Card */}
       <section className="project-card">
-        <div className="project-card-title">
-          <h3>Select Project for Budget Tracking</h3>
+        <div className="project-card-title" style={{ borderBottom: '1px solid var(--line)', paddingBottom: '12px', marginBottom: '18px' }}>
+          <Briefcase size={20} className="project-title-icon" />
+          <h3 style={{ margin: 0 }}>Select Project for Budget Tracking</h3>
         </div>
-        <div style={{ padding: '24px' }}>
-          <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)} style={{ padding: '10px', width: '100%', maxWidth: '400px', borderRadius: '4px' }}>
-            <option value="">-- Select a Project --</option>
-            {projects.filter(p => p.totalBudget > 0 || p.consumedBudget > 0).map(p => (
-              <option key={p._id} value={p._id}>{p.name}</option>
-            ))}
-          </select>
+        <div>
+          <CustomSelect
+            value={selectedProjectId}
+            onChange={(val) => setSelectedProjectId(val)}
+            options={[
+              { value: '', label: '-- Select a Project --' },
+              ...projects.filter(p => p.totalBudget > 0 || p.consumedBudget > 0).map(p => ({ value: p._id, label: p.name }))
+            ]}
+            placeholder="-- Select a Project --"
+            style={{ width: '100%', maxWidth: '400px' }}
+          />
         </div>
       </section>
 
       {selectedProject && (
         <>
-          <section className="dashboard-strip" style={{ marginTop: '24px' }}>
+          {/* Summary Metrics & Progress Strip */}
+          <section className="dashboard-strip" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div className="metrics">
               <div className="metric-card">
+                <div className="metric-icon">
+                  <Coins size={20} />
+                </div>
                 <span>Total Budget</span>
                 <strong>{fmt(selectedProject.totalBudget || 0)}</strong>
               </div>
-              <div className="metric-card revenue-card">
+              <div className="metric-card">
+                <div className="metric-icon orange">
+                  <TrendingUp size={20} />
+                </div>
                 <span>Consumed Budget</span>
                 <strong>{fmt(selectedProject.consumedBudget || 0)}</strong>
               </div>
               <div className="metric-card">
-                <span className="metric-icon green">B</span>
+                <div className="metric-icon green">
+                  <DollarSign size={20} />
+                </div>
                 <span>Remaining Budget</span>
                 <strong>{fmt(selectedProject.remainingBudget || 0)}</strong>
               </div>
               <div className="metric-card">
+                <div className="metric-icon">
+                  <Clock size={20} />
+                </div>
                 <span>Quarterly Billed</span>
                 <strong>{fmt(selectedProject.quarterlyBilledAmount || 0)}</strong>
               </div>
             </div>
             
-            <div style={{ padding: '24px', background: 'white', borderRadius: '16px', marginTop: '24px', boxShadow: 'var(--shadow-soft)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontWeight: 'bold' }}>Budget Usage</span>
-                <span>{selectedProject.totalBudget > 0 ? Math.round(((selectedProject.consumedBudget || 0) / selectedProject.totalBudget) * 100) : 0}%</span>
+            {/* Visual Progress Bar */}
+            <div style={{ 
+              padding: '24px', 
+              background: 'var(--surface-strong)', 
+              borderRadius: 'var(--radius)', 
+              border: '1px solid var(--line)',
+              boxShadow: 'var(--shadow-soft)' 
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px', color: 'var(--ink)' }}>
+                <span style={{ fontWeight: '700' }}>Budget Utilization</span>
+                <span style={{ fontWeight: '700' }}>{selectedProject.totalBudget > 0 ? Math.round(((selectedProject.consumedBudget || 0) / selectedProject.totalBudget) * 100) : 0}%</span>
               </div>
-              <div style={{ width: '100%', height: '12px', background: '#eef4ff', borderRadius: '6px', overflow: 'hidden' }}>
-                <div style={{ width: `${selectedProject.totalBudget > 0 ? Math.min(100, ((selectedProject.consumedBudget || 0) / selectedProject.totalBudget) * 100) : 0}%`, height: '100%', background: '#5b4aff', transition: 'width 0.3s ease' }}></div>
+              <div style={{ width: '100%', height: '10px', background: 'var(--bg)', borderRadius: '6px', overflow: 'hidden' }}>
+                <div style={{ 
+                  width: `${selectedProject.totalBudget > 0 ? Math.min(100, ((selectedProject.consumedBudget || 0) / selectedProject.totalBudget) * 100) : 0}%`, 
+                  height: '100%', 
+                  background: 'var(--primary)', 
+                  boxShadow: '0 0 10px rgba(99, 102, 241, 0.4)',
+                  transition: 'width 0.4s ease' 
+                }}></div>
               </div>
             </div>
           </section>
 
-          <section className="project-card add-project-card" style={{ marginTop: '24px' }}>
-            <div className="project-card-title">
-              <span className="project-title-icon">+</span>
-              <h3>Add Project Request</h3>
+          {/* Add Request Card */}
+          <section className="project-card add-project-card">
+            <div className="project-card-title" style={{ borderBottom: '1px solid var(--line)', paddingBottom: '12px', marginBottom: '18px' }}>
+              <Plus size={20} className="project-title-icon" />
+              <h3 style={{ margin: 0 }}>Add Project Request</h3>
             </div>
             <form className="project-form" onSubmit={submit}>
               <label className="project-field">
@@ -163,22 +210,26 @@ export default function BudgetTracker({ projects, currencyConfig, currency, api 
               </label>
               <label className="project-field">
                 <span>Quarter</span>
-                <select value={form.quarter} onChange={e => setForm({...form, quarter: e.target.value})}>
-                  <option value="Q1">Q1</option>
-                  <option value="Q2">Q2</option>
-                  <option value="Q3">Q3</option>
-                  <option value="Q4">Q4</option>
-                </select>
+                <CustomSelect
+                  value={form.quarter}
+                  onChange={(val) => setForm({...form, quarter: val})}
+                  options={['Q1', 'Q2', 'Q3', 'Q4']}
+                  placeholder="Select Quarter"
+                />
               </label>
-              <button className="project-submit" type="submit">Add Request</button>
+              <button className="project-submit" type="submit" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                <Plus size={16} />
+                <span>Add Request</span>
+              </button>
             </form>
           </section>
 
-          <section className="project-card" style={{ marginTop: '24px' }}>
-            <div className="project-list-head">
+          {/* Requests List Card */}
+          <section className="project-card">
+            <div className="project-list-head" style={{ borderBottom: '1px solid var(--line)', paddingBottom: '16px', marginBottom: '16px' }}>
               <div className="project-card-title">
-                <span className="project-title-icon">R</span>
-                <h3>Project Requests</h3>
+                <FileText size={20} className="project-title-icon" />
+                <h3 style={{ margin: 0 }}>Project Requests List</h3>
               </div>
             </div>
             <div className="project-table-wrap">
@@ -191,7 +242,7 @@ export default function BudgetTracker({ projects, currencyConfig, currency, api 
                     <th>Quote</th>
                     <th>Quarter</th>
                     <th>Billing Status</th>
-                    <th>Action</th>
+                    <th style={{ textAlign: 'right' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -213,31 +264,40 @@ export default function BudgetTracker({ projects, currencyConfig, currency, api 
                         </td>
                         <td>
                           {isEditing ? (
-                            <select value={editForm.quarter} onChange={(e) => setEditForm({ ...editForm, quarter: e.target.value })}>
-                              <option value="Q1">Q1</option>
-                              <option value="Q2">Q2</option>
-                              <option value="Q3">Q3</option>
-                              <option value="Q4">Q4</option>
-                            </select>
+                            <CustomSelect
+                              value={editForm.quarter}
+                              onChange={(val) => setEditForm({ ...editForm, quarter: val })}
+                              options={['Q1', 'Q2', 'Q3', 'Q4']}
+                              placeholder="Select Quarter"
+                              style={{ minWidth: '100px' }}
+                            />
                           ) : req.quarter}
                         </td>
                         <td>
-                          <span className={`status-badge ${req.billingStatus.toLowerCase()}`}>{req.billingStatus}</span>
+                          <span className={`status-badge ${req.billingStatus.toLowerCase() === 'billed' ? 'in-progress' : 'on-hold'}`}>{req.billingStatus}</span>
                         </td>
                         <td>
-                          <div className="project-actions" style={{ display: 'flex', gap: '8px' }}>
+                          <div className="project-actions" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                             {isEditing ? (
                               <>
-                                <button type="button" onClick={() => saveEdit(req._id)}>Save</button>
-                                <button className="secondary" type="button" onClick={() => setEditingReqId('')}>Cancel</button>
+                                <button className="secondary icon-button" type="button" onClick={() => saveEdit(req._id)} title="Save request">
+                                  <Check size={14} />
+                                </button>
+                                <button className="secondary icon-button" type="button" onClick={() => setEditingReqId('')} title="Cancel">
+                                  <X size={14} />
+                                </button>
                               </>
                             ) : (
                               <>
-                                <button type="button" className="secondary" onClick={() => toggleBillingStatus(req)}>
+                                <button type="button" className="secondary" style={{ fontSize: '11px', minHeight: '32px', borderRadius: '6px' }} onClick={() => toggleBillingStatus(req)}>
                                   Mark {req.billingStatus === 'Pending' ? 'Billed' : 'Pending'}
                                 </button>
-                                <button className="secondary icon-button" type="button" onClick={() => startEdit(req)}>E</button>
-                                <button className="danger icon-button" type="button" onClick={() => deleteRequest(req._id)}>D</button>
+                                <button className="secondary icon-button" type="button" onClick={() => startEdit(req)} title="Edit request">
+                                  <Edit2 size={14} />
+                                </button>
+                                <button className="danger icon-button" type="button" onClick={() => deleteRequest(req._id)} title="Delete request">
+                                  <Trash2 size={14} />
+                                </button>
                               </>
                             )}
                           </div>
@@ -247,7 +307,7 @@ export default function BudgetTracker({ projects, currencyConfig, currency, api 
                   })}
                   {requests.length === 0 && (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '24px' }}>No requests added yet.</td>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: 'var(--muted)' }}>No requests added yet.</td>
                     </tr>
                   )}
                 </tbody>

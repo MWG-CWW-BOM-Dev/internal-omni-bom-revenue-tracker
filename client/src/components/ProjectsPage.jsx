@@ -1,4 +1,18 @@
 import React, { useState } from 'react';
+import CustomSelect from './CustomSelect.jsx';
+import { 
+  FolderPlus, 
+  Briefcase, 
+  Clock, 
+  Coins, 
+  Search, 
+  Plus, 
+  Edit2, 
+  Trash2, 
+  Check, 
+  X,
+  FileSpreadsheet
+} from 'lucide-react';
 
 const statusOptions = ['In Pipeline', 'On Hold', 'In Progress', 'Delivered', 'Cancelled'];
 
@@ -43,23 +57,27 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
       totalBudget: project.totalBudget || 0,
       status: project.status || 'In Pipeline',
       startDate: project.startDate ? new Date(project.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-      endDate: project.endDate ? new Date(project.endDate).toISOString().split('T')[0] : ''
+      endDate: project.endDate ? new Date(project.endDate).toISOString().split('T')[0] : '',
+      projectType: project.projectType || 'adhoc'
     });
   }
 
   return (
-    <>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+      
+      {/* Visual Banners */}
       <section className="project-metrics">
-        <ProjectMetric tone="purple" label="Total Projects" value={projects.length} delta="+12.5%" />
-        <ProjectMetric tone="green" label="Active Projects" value={activeProjects} delta="+8.2%" />
-        <ProjectMetric tone="amber" label="Total Hours" value={`${number(summary.totalHours)}h`} delta="+10.3%" icon="h" />
-        <ProjectMetric tone="red" label="Total Revenue" value={currency(summary.totalRevenue, currencyConfig)} delta="+12.5%" icon={currencyConfig.symbol} />
+        <ProjectMetric tone="purple" label="Total Projects" value={projects.length} delta="+12.5%" icon={<FolderPlus size={18} />} />
+        <ProjectMetric tone="green" label="Active Projects" value={activeProjects} delta="+8.2%" icon={<Briefcase size={18} />} />
+        <ProjectMetric tone="amber" label="Total Hours" value={`${number(summary.totalHours)}h`} delta="+10.3%" icon={<Clock size={18} />} />
+        <ProjectMetric tone="red" label="Total Budgeted" value={currency(summary.totalRevenue, currencyConfig)} delta="+12.5%" icon={<Coins size={18} />} />
       </section>
 
+      {/* Add New Project Card */}
       <section className="project-card add-project-card">
-        <div className="project-card-title">
-          <span className="project-title-icon">+</span>
-          <h3>Add New Project</h3>
+        <div className="project-card-title" style={{ borderBottom: '1px solid var(--line)', paddingBottom: '12px', marginBottom: '18px' }}>
+          <FolderPlus size={20} className="project-title-icon" />
+          <h3 style={{ margin: 0 }}>Add New Project</h3>
         </div>
         <form className="project-form" onSubmit={submit}>
           <Field label="Project Name">
@@ -69,27 +87,39 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
             <input placeholder="Enter contact name" value={form.pointOfContact} required onChange={(event) => setForm({ ...form, pointOfContact: event.target.value })} />
           </Field>
           <Field label="Market">
-            <select value={form.marketId} required onChange={(event) => setForm({ ...form, marketId: event.target.value })}>
-              <option value="">Select market</option>
-              {markets.map((market) => (
-                <option key={market._id} value={market._id}>
-                  {market.name}
-                </option>
-              ))}
-            </select>
+            <CustomSelect
+              value={form.marketId}
+              required
+              onChange={(val) => setForm({ ...form, marketId: val })}
+              options={markets.map(market => ({ value: market._id, label: market.flag ? `${market.flag} ${market.name}` : market.name }))}
+              placeholder="Select market"
+            />
           </Field>
           <Field label="Brand (Optional)">
-            <select value={form.brandId} onChange={(event) => setForm({ ...form, brandId: event.target.value })}>
-              <option value="">Select brand</option>
-              {brands.map((brand) => (
-                <option key={brand._id} value={brand._id}>
-                  {brand.name}
-                </option>
-              ))}
-            </select>
+            <CustomSelect
+              value={form.brandId}
+              onChange={(val) => setForm({ ...form, brandId: val })}
+              options={[
+                { value: '', label: 'Select brand' },
+                ...brands.map(brand => ({ value: brand._id, label: brand.name }))
+              ]}
+              placeholder="Select brand"
+            />
           </Field>
           <Field label="Billing Type">
             <BillingToggle value={form.billingType} onChange={(billingType) => setForm({ ...form, billingType })} />
+          </Field>
+          <Field label="Project Type">
+            <CustomSelect
+              value={form.projectType || 'adhoc'}
+              required
+              onChange={(val) => setForm({ ...form, projectType: val })}
+              options={[
+                { value: 'adhoc', label: 'Adhoc Project' },
+                { value: 'fte', label: 'FTE Project' }
+              ]}
+              placeholder="Select Type"
+            />
           </Field>
           <Field label="Fixed Budget (Optional)" wide>
             <input type="number" min="0" step="0.01" placeholder="Enter budget amount" value={form.fixedBudget} onChange={(event) => setForm({ ...form, fixedBudget: event.target.value })} />
@@ -104,25 +134,38 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
             <input type="date" value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} />
           </Field>
           <Field label="Status">
-            <select value={form.status} required onChange={(event) => setForm({ ...form, status: event.target.value })}>
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
+            <CustomSelect
+              value={form.status}
+              required
+              onChange={(val) => setForm({ ...form, status: val })}
+              options={statusOptions}
+              placeholder="Select status"
+            />
           </Field>
-          <button className="project-submit" type="submit">Add Project</button>
+          <button className="project-submit" type="submit" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+            <Plus size={16} />
+            <span>Add Project</span>
+          </button>
         </form>
       </section>
 
+      {/* Projects List Card */}
       <section className="project-card">
-        <div className="project-list-head">
+        <div className="project-list-head" style={{ borderBottom: '1px solid var(--line)', paddingBottom: '16px', marginBottom: '16px' }}>
           <div className="project-card-title">
-            <span className="project-title-icon">P</span>
-            <h3>All Projects</h3>
+            <FileSpreadsheet size={20} className="project-title-icon" />
+            <h3 style={{ margin: 0 }}>All Active Projects</h3>
           </div>
-          <input className="project-search" placeholder="Search projects..." value={search} onChange={(event) => setSearch(event.target.value)} />
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <Search size={14} style={{ position: 'absolute', left: '12px', color: 'var(--muted)', pointerEvents: 'none' }} />
+            <input 
+              className="project-search" 
+              placeholder="Search projects..." 
+              value={search} 
+              onChange={(event) => setSearch(event.target.value)} 
+              style={{ paddingLeft: '32px', minHeight: '38px', borderRadius: '999px' }}
+            />
+          </div>
         </div>
 
         <div className="project-table-wrap">
@@ -133,6 +176,7 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
                 <th>Market</th>
                 <th>Point of Contact</th>
                 <th>Brand</th>
+                <th>Project Type</th>
                 <th>Billing</th>
                 <th>Fixed Budget</th>
                 <th>Total Budget</th>
@@ -153,12 +197,29 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
                         {isEditing ? <input value={editForm.name} onChange={(event) => setEditForm({ ...editForm, name: event.target.value })} /> : project.name}
                       </div>
                     </td>
-                    <td>{isEditing ? <MarketSelect value={editForm.marketId} markets={markets} onChange={(marketId) => setEditForm({ ...editForm, marketId })} /> : project.marketId?.name || '-'}</td>
+                    <td>{isEditing ? <MarketSelect value={editForm.marketId} markets={markets} onChange={(marketId) => setEditForm({ ...editForm, marketId })} /> : (project.marketId?.flag ? `${project.marketId.flag} ${project.marketId.name}` : project.marketId?.name || '-')}</td>
                     <td>{isEditing ? <input value={editForm.pointOfContact} onChange={(event) => setEditForm({ ...editForm, pointOfContact: event.target.value })} /> : project.pointOfContact || '-'}</td>
                     <td>{isEditing ? <BrandSelect value={editForm.brandId} brands={brands} onChange={(brandId) => setEditForm({ ...editForm, brandId })} /> : project.brandId?.name || '-'}</td>
+                    <td>
+                      {isEditing ? (
+                        <CustomSelect
+                          value={editForm.projectType || 'adhoc'}
+                          onChange={(val) => setEditForm({ ...editForm, projectType: val })}
+                          options={[
+                            { value: 'adhoc', label: 'Adhoc' },
+                            { value: 'fte', label: 'FTE' }
+                          ]}
+                          style={{ minWidth: '95px' }}
+                        />
+                      ) : (
+                        <span className={`type-pill ${(project.projectType || 'adhoc')}`}>
+                          {(project.projectType || 'adhoc') === 'fte' ? 'FTE Project' : 'Adhoc Project'}
+                        </span>
+                      )}
+                    </td>
                     <td>{isEditing ? <BillingToggle value={editForm.billingType} onChange={(billingType) => setEditForm({ ...editForm, billingType })} compact /> : <span className="billing-pill">{project.billingType === 'fixed' ? 'Fixed Budget' : 'Hourly Based'}</span>}</td>
-                    <td>{isEditing ? <input type="number" min="0" step="0.01" value={editForm.fixedBudget} onChange={(event) => setEditForm({ ...editForm, fixedBudget: event.target.value })} /> : currency(project.fixedBudget || 0, currencyConfig)}</td>
-                    <td>{isEditing ? <input type="number" min="0" step="0.01" value={editForm.totalBudget || 0} onChange={(event) => setEditForm({ ...editForm, totalBudget: event.target.value })} /> : currency(project.totalBudget || 0, currencyConfig)}</td>
+                    <td>{isEditing ? <input type="number" min="0" step="0.01" value={editForm.fixedBudget} style={{maxWidth: '100px'}} onChange={(event) => setEditForm({ ...editForm, fixedBudget: event.target.value })} /> : currency(project.fixedBudget || 0, currencyConfig)}</td>
+                    <td>{isEditing ? <input type="number" min="0" step="0.01" value={editForm.totalBudget || 0} style={{maxWidth: '100px'}} onChange={(event) => setEditForm({ ...editForm, totalBudget: event.target.value })} /> : currency(project.totalBudget || 0, currencyConfig)}</td>
                     <td>{isEditing ? <input type="date" value={editForm.startDate} required onChange={(event) => setEditForm({ ...editForm, startDate: event.target.value })} /> : (project.startDate ? new Date(project.startDate).toLocaleDateString() : '-')}</td>
                     <td>{isEditing ? <input type="date" value={editForm.endDate} onChange={(event) => setEditForm({ ...editForm, endDate: event.target.value })} /> : (project.endDate ? new Date(project.endDate).toLocaleDateString() : '-')}</td>
                     <td>{isEditing ? <StatusSelect value={editForm.status} onChange={(status) => setEditForm({ ...editForm, status })} /> : <StatusBadge status={project.status} />}</td>
@@ -166,13 +227,21 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
                       <div className="project-actions">
                         {isEditing ? (
                           <>
-                            <button type="button" onClick={() => save(project._id)}>Save</button>
-                            <button className="secondary" type="button" onClick={() => setEditingId('')}>Cancel</button>
+                            <button className="secondary icon-button" type="button" onClick={() => save(project._id)} title="Save changes">
+                              <Check size={14} />
+                            </button>
+                            <button className="secondary icon-button" type="button" onClick={() => setEditingId('')} title="Cancel">
+                              <X size={14} />
+                            </button>
                           </>
                         ) : (
                           <>
-                            <button className="secondary icon-button" type="button" onClick={() => startEdit(project)}>E</button>
-                            <button className="danger icon-button" type="button" onClick={() => onDelete(project._id)}>D</button>
+                            <button className="secondary icon-button" type="button" onClick={() => startEdit(project)} title="Edit project">
+                              <Edit2 size={14} />
+                            </button>
+                            <button className="danger icon-button" type="button" onClick={() => onDelete(project._id)} title="Delete project">
+                              <Trash2 size={14} />
+                            </button>
                           </>
                         )}
                       </div>
@@ -185,11 +254,11 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
         </div>
         <div className="project-pagination">Showing 1 to {visibleProjects.length} of {projects.length} projects</div>
       </section>
-    </>
+    </div>
   );
 }
 
-function ProjectMetric({ tone, label, value, delta, icon = 'P' }) {
+function ProjectMetric({ tone, label, value, delta, icon }) {
   return (
     <div className={`project-metric ${tone}`}>
       <span className="project-metric-icon">{icon}</span>
@@ -222,26 +291,37 @@ function BillingToggle({ value, onChange, compact = false }) {
 
 function MarketSelect({ value, markets, onChange }) {
   return (
-    <select value={value} onChange={(event) => onChange(event.target.value)}>
-      {markets.map((market) => <option key={market._id} value={market._id}>{market.name}</option>)}
-    </select>
+    <CustomSelect
+      value={value}
+      onChange={onChange}
+      options={markets.map((market) => ({ value: market._id, label: market.flag ? `${market.flag} ${market.name}` : market.name }))}
+      style={{ minWidth: '120px' }}
+    />
   );
 }
 
 function BrandSelect({ value, brands, onChange }) {
   return (
-    <select value={value} onChange={(event) => onChange(event.target.value)}>
-      <option value="">-</option>
-      {brands.map((brand) => <option key={brand._id} value={brand._id}>{brand.name}</option>)}
-    </select>
+    <CustomSelect
+      value={value}
+      onChange={onChange}
+      options={[
+        { value: '', label: '-' },
+        ...brands.map((brand) => ({ value: brand._id, label: brand.name }))
+      ]}
+      style={{ minWidth: '120px' }}
+    />
   );
 }
 
 function StatusSelect({ value, onChange }) {
   return (
-    <select value={value} onChange={(event) => onChange(event.target.value)}>
-      {statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
-    </select>
+    <CustomSelect
+      value={value}
+      onChange={onChange}
+      options={statusOptions}
+      style={{ minWidth: '120px' }}
+    />
   );
 }
 
@@ -251,7 +331,7 @@ function StatusBadge({ status = 'In Pipeline' }) {
 
 function initialForm() {
   const today = new Date().toISOString().split('T')[0];
-  return { name: '', pointOfContact: '', marketId: '', brandId: '', billingType: 'hourly', fixedBudget: 0, totalBudget: 0, status: 'In Pipeline', startDate: today, endDate: '' };
+  return { name: '', pointOfContact: '', marketId: '', brandId: '', billingType: 'hourly', fixedBudget: 0, totalBudget: 0, status: 'In Pipeline', startDate: today, endDate: '', projectType: 'adhoc' };
 }
 
 function payload(form) {
@@ -265,7 +345,8 @@ function payload(form) {
     totalBudget: Number(form.totalBudget || 0),
     startDate: form.startDate,
     endDate: form.endDate || null,
-    status: form.status
+    status: form.status,
+    projectType: form.projectType || 'adhoc'
   };
 }
 

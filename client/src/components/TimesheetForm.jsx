@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
+import CustomSelect from './CustomSelect.jsx';
+import { Search, X } from 'lucide-react';
+
 
 export default function TimesheetForm({ resources, projects, timesheets, dates, onCreate, onUpdate, onDelete, currencyConfig = { rate: 1, symbol: '$', code: 'USD' } }) {
   const [search, setSearch] = useState('');
   const [selectedCell, setSelectedCell] = useState(null);
-  const [form, setForm] = useState({ projectId: '', hoursWorked: '', comments: '' });
+  const [form, setForm] = useState({ projectId: '', leaveType: '', hoursWorked: '', comments: '' });
   const [dragContext, setDragContext] = useState(null);
   
   const filteredResources = resources.filter((resource) =>
@@ -13,10 +16,10 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
   function openCell(resource, date, entry = null) {
     if (entry) {
       setSelectedCell({ resource, date, entryId: entry._id });
-      setForm({ projectId: entry.projectId?._id || entry.projectId, hoursWorked: entry.hoursWorked, comments: entry.comments || '' });
+      setForm({ projectId: entry.projectId?._id || entry.projectId || '', leaveType: entry.leaveType || '', hoursWorked: entry.hoursWorked, comments: entry.comments || '' });
     } else {
       setSelectedCell({ resource, date });
-      setForm({ projectId: '', hoursWorked: '', comments: '' });
+      setForm({ projectId: '', leaveType: '', hoursWorked: '', comments: '' });
     }
   }
 
@@ -25,7 +28,8 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
     const payload = {
       date: selectedCell.date,
       resourceId: selectedCell.resource._id,
-      projectId: form.projectId,
+      projectId: form.projectId || undefined,
+      leaveType: form.leaveType || undefined,
       hoursWorked: form.hoursWorked,
       comments: form.comments
     };
@@ -35,7 +39,7 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
       await onCreate(payload);
     }
     setSelectedCell(null);
-    setForm({ projectId: '', hoursWorked: '', comments: '' });
+    setForm({ projectId: '', leaveType: '', hoursWorked: '', comments: '' });
   }
 
   function handleDragStart(e, entry, date, resourceId) {
@@ -78,7 +82,8 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
       const payloads = datesToFill.map(d => ({
         date: d,
         resourceId: dragContext.resourceId,
-        projectId: dragContext.sourceEntry.projectId?._id || dragContext.sourceEntry.projectId,
+        projectId: dragContext.sourceEntry.projectId?._id || dragContext.sourceEntry.projectId || undefined,
+        leaveType: dragContext.sourceEntry.leaveType || undefined,
         hoursWorked: dragContext.sourceEntry.hoursWorked,
         comments: dragContext.sourceEntry.comments
       }));
@@ -90,12 +95,14 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
   return (
     <section className="panel scheduler-panel">
       <div className="scheduler" style={{ gridTemplateColumns: `224px repeat(${Math.max(dates.length, 1)}, minmax(126px, 1fr))` }}>
-        <div className="scheduler-head resource-head">
+        <div className="scheduler-head resource-head" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <Search size={14} style={{ position: 'absolute', left: '22px', color: 'var(--muted)', pointerEvents: 'none' }} />
           <input
             className="scheduler-search"
             placeholder="Search resource..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
+            style={{ paddingLeft: '32px' }}
           />
         </div>
         {dates.map((date) => (
@@ -134,9 +141,9 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
                   onDragEnter={(e) => e.preventDefault()}
                 >
                   {entries.map((entry) => (
-                    <span className={`time-block ${colorClass(entry.projectId?.name)}`} key={entry._id} onClick={(event) => { event.stopPropagation(); openCell(resource, date, entry); }}>
+                    <span className={`time-block ${entry.leaveType ? 'time-off' : colorClass(entry.projectId?.name)}`} key={entry._id} onClick={(event) => { event.stopPropagation(); openCell(resource, date, entry); }}>
                       <div className="custom-tooltip">
-                        Project: {entry.projectId?.name}<br />
+                        {entry.leaveType ? `Leave: ${entry.leaveType}` : `Project: ${entry.projectId?.name}`}<br />
                         Hours: {entry.hoursWorked}h/day<br />
                         {entry.comments && <span>Comments: {entry.comments}</span>}
                       </div>
@@ -149,9 +156,9 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
                           onDelete(entry._id);
                         }}
                       >
-                        X
+                        <X size={10} />
                       </button>
-                      <strong>{entry.projectId?.name}</strong>
+                      <strong>{entry.leaveType ? entry.leaveType : entry.projectId?.name}</strong>
                       <small>{entry.hoursWorked}h per day</small>
                       <div 
                         className="drag-handle" 
@@ -180,19 +187,31 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
                 <p>{selectedCell.resource.name}</p>
               </div>
               <button className="secondary icon-button" type="button" onClick={() => setSelectedCell(null)}>
-                X
+                <X size={16} />
               </button>
             </div>
 
             <form className="modal-form" onSubmit={submit}>
-              <select required value={form.projectId} onChange={(event) => setForm({ ...form, projectId: event.target.value })}>
-                <option value="">Project</option>
-                {projects.map((project) => (
-                  <option key={project._id} value={project._id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
+              <CustomSelect
+                required
+                value={form.leaveType || form.projectId}
+                onChange={(val) => {
+                  if (['TWT', 'SL', 'CL', 'PL'].includes(val)) {
+                    setForm({ ...form, leaveType: val, projectId: '' });
+                  } else {
+                    setForm({ ...form, projectId: val, leaveType: '' });
+                  }
+                }}
+                options={[
+                  { value: '', label: 'Project / Leave Type' },
+                  { value: 'TWT', label: '🍂 Leave: TWT (Time Without Time)' },
+                  { value: 'SL', label: '🤒 Leave: SL (Sick Leave)' },
+                  { value: 'CL', label: '🏖️ Leave: CL (Casual Leave)' },
+                  { value: 'PL', label: '💼 Leave: PL (Privilege Leave)' },
+                  ...projects.map((project) => ({ value: project._id, label: `📁 Project: ${project.name}` }))
+                ]}
+                placeholder="Project / Leave Type"
+              />
               <input
                 type="number"
                 min="0"
@@ -207,7 +226,16 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
                 value={form.comments}
                 onChange={(event) => setForm({ ...form, comments: event.target.value })}
                 rows="3"
-                style={{ width: '100%', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', outline: 'none', resize: 'vertical' }}
+                style={{ 
+                  width: '100%', 
+                  padding: '12px', 
+                  border: '1px solid var(--line)', 
+                  borderRadius: 'var(--radius-sm)', 
+                  background: 'var(--surface-strong)',
+                  color: 'var(--ink)',
+                  outline: 'none', 
+                  resize: 'vertical' 
+                }}
               ></textarea>
               <button type="submit">Save Time</button>
             </form>

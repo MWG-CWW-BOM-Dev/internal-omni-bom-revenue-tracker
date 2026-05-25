@@ -34,10 +34,18 @@ router.post('/', async (req, res, next) => {
     for (const body of bodies) {
       const resource = await Resource.findById(body.resourceId);
       if (!resource) return res.status(400).json({ message: 'Resource not found' });
-      const project = await Project.findById(body.projectId);
-      if (!project) return res.status(400).json({ message: 'Project not found' });
+      
+      let revenue = 0;
+      let project = null;
+      
+      if (body.projectId) {
+        project = await Project.findById(body.projectId);
+        if (!project) return res.status(400).json({ message: 'Project not found' });
+        revenue = revenueForEntry(project, resource, body.hoursWorked);
+      } else if (!body.leaveType) {
+        return res.status(400).json({ message: 'Either Project or Leave Type is required' });
+      }
 
-      const revenue = revenueForEntry(project, resource, body.hoursWorked);
       const entry = await TimesheetEntry.create({ ...body, revenue });
       createdEntries.push(await entry.populate(populate));
     }
@@ -54,15 +62,28 @@ router.put('/:id', async (req, res, next) => {
     if (!existing) return res.status(404).json({ message: 'Not found' });
 
     const resourceId = req.body.resourceId || existing.resourceId;
-    const projectId = req.body.projectId || existing.projectId;
+    const projectId = req.body.projectId !== undefined ? req.body.projectId : existing.projectId;
+    const leaveType = req.body.leaveType !== undefined ? req.body.leaveType : existing.leaveType;
     const hoursWorked = req.body.hoursWorked ?? existing.hoursWorked;
+    
     const resource = await Resource.findById(resourceId);
     if (!resource) return res.status(400).json({ message: 'Resource not found' });
-    const project = await Project.findById(projectId);
-    if (!project) return res.status(400).json({ message: 'Project not found' });
+    
+    let revenue = 0;
+    let project = null;
+    
+    if (projectId) {
+      project = await Project.findById(projectId);
+      if (!project) return res.status(400).json({ message: 'Project not found' });
+      revenue = revenueForEntry(project, resource, hoursWorked);
+    } else if (!leaveType) {
+      return res.status(400).json({ message: 'Either Project or Leave Type is required' });
+    }
 
     Object.assign(existing, req.body, {
-      revenue: revenueForEntry(project, resource, hoursWorked)
+      projectId: projectId || null,
+      leaveType: leaveType || null,
+      revenue
     });
     await existing.save();
 

@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import CustomSelect from './CustomSelect.jsx';
+import { Plus, Edit2, Trash2, Check, X } from 'lucide-react';
 
 export default function EntityPage({ title, fields, items, onCreate, onUpdate, onDelete }) {
   const initialForm = emptyForm(fields);
@@ -42,7 +44,10 @@ export default function EntityPage({ title, fields, items, onCreate, onUpdate, o
             onChange={(value) => setForm({ ...form, [field.name]: value })}
           />
         ))}
-        <button type="submit">Add</button>
+        <button type="submit" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+          <Plus size={16} />
+          <span>Add</span>
+        </button>
       </form>
 
       <div className="table-wrap">
@@ -52,7 +57,7 @@ export default function EntityPage({ title, fields, items, onCreate, onUpdate, o
               {fields.map((field) => (
                 <th key={field.name}>{field.tableLabel || field.label}</th>
               ))}
-              <th>Actions</th>
+              <th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -79,20 +84,20 @@ export default function EntityPage({ title, fields, items, onCreate, onUpdate, o
                     <div className="row-actions">
                       {isEditing ? (
                         <>
-                          <button type="button" onClick={() => saveEdit(item._id)}>
-                            Save
+                          <button className="secondary icon-button" type="button" onClick={() => saveEdit(item._id)} title="Save changes">
+                            <Check size={14} />
                           </button>
-                          <button className="secondary" type="button" onClick={() => setEditingId('')}>
-                            Cancel
+                          <button className="secondary icon-button" type="button" onClick={() => setEditingId('')} title="Cancel">
+                            <X size={14} />
                           </button>
                         </>
                       ) : (
                         <>
-                          <button className="secondary" type="button" onClick={() => startEdit(item)}>
-                            Edit
+                          <button className="secondary icon-button" type="button" onClick={() => startEdit(item)} title="Edit record">
+                            <Edit2 size={14} />
                           </button>
-                          <button className="danger" type="button" onClick={() => onDelete(item._id)}>
-                            Delete
+                          <button className="danger icon-button" type="button" onClick={() => onDelete(item._id)} title="Delete record">
+                            <Trash2 size={14} />
                           </button>
                         </>
                       )}
@@ -205,14 +210,14 @@ function FieldControl({ field, value, onChange, compact = false }) {
 
   if (field.type === 'select') {
     return (
-      <select className={compact ? 'compact-field' : ''} value={value || ''} required={field.required} onChange={(event) => onChange(event.target.value)}>
-        <option value="">{field.label}</option>
-        {field.options.map((option) => (
-          <option key={option._id} value={option._id}>
-            {option.name}
-          </option>
-        ))}
-      </select>
+      <CustomSelect
+        className={compact ? 'compact-field' : ''}
+        value={value || ''}
+        required={field.required}
+        onChange={onChange}
+        placeholder={field.label}
+        options={field.options.map(option => ({ value: option._id, label: option.name }))}
+      />
     );
   }
 

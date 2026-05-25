@@ -24,7 +24,13 @@ const projectSchema = new mongoose.Schema(
     totalBudget: { type: Number, default: 0, min: 0 },
     consumedBudget: { type: Number, default: 0, min: 0 },
     remainingBudget: { type: Number, default: 0 },
-    quarterlyBilledAmount: { type: Number, default: 0, min: 0 }
+    quarterlyBilledAmount: { type: Number, default: 0, min: 0 },
+    projectType: {
+      type: String,
+      enum: ['adhoc', 'fte'],
+      default: 'adhoc',
+      required: true
+    }
   },
   { timestamps: true }
 );
