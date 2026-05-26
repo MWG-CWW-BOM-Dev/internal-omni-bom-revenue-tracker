@@ -804,6 +804,14 @@ td:last-child,
   margin-top: 10px;
 }
 
+.project-metric small.positive {
+  color: var(--success);
+}
+
+.project-metric small.negative {
+  color: var(--danger);
+}
+
 .project-metric em {
   color: var(--muted);
   font-style: normal;

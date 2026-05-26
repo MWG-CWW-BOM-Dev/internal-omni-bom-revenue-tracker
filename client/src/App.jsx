@@ -56,6 +56,16 @@ export default function App() {
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
   const exportDropdownRef = useRef(null);
 
+  const [ippBudget, setIppBudget] = useState(() => {
+    const saved = localStorage.getItem('ipp_budget');
+    return saved ? parseFloat(saved) : 100000;
+  });
+
+  const handleUpdateIppBudget = (val) => {
+    setIppBudget(val);
+    localStorage.setItem('ipp_budget', val);
+  };
+
   useEffect(() => {
     localStorage.setItem('theme', theme);
     
@@ -138,11 +148,23 @@ export default function App() {
     const timesheetData = filteredTimesheets.map(entry => {
       const res = resources.find(r => r._id === idValue(entry.resourceId));
       const proj = projects.find(p => p._id === idValue(entry.projectId));
+      const marketObj = proj ? markets.find(m => m._id === idValue(proj.marketId)) : null;
+      const brandObj = proj ? brands.find(b => b._id === idValue(proj.brandId)) : null;
+
+      const dStr = entry.date.slice(0, 10);
+      const y = parseInt(dStr.slice(0, 4));
+      const m = parseInt(dStr.slice(5, 7)) - 1;
+      const d = parseInt(dStr.slice(8, 10));
+
       return {
-        Date: formatDateDMY(entry.date.slice(0, 10)),
+        Date: new Date(y, m, d),
         'Resource Name': res?.name || '',
         'Resource Designation': res?.designation || '',
+        Market: marketObj ? `${marketObj.flag || ''} ${marketObj.name}`.trim() : (entry.leaveType ? 'Paid Leave' : 'Global / Core'),
+        Brand: brandObj?.name || 'Corporate',
         'Type / Project': entry.leaveType || proj?.name || '',
+        'Project Type': proj ? ((proj.projectType || 'adhoc') === 'fte' ? 'FTE Project' : 'Adhoc Project') : (entry.leaveType ? 'Leave' : '-'),
+        'Billing Type': proj ? (proj.billingType === 'fixed' ? 'Fixed Budget' : 'Hourly Rate') : (entry.leaveType ? 'Paid Leave' : '-'),
         'Hours Worked': entry.hoursWorked,
         'Calculated Revenue': entry.revenue,
         Comments: entry.comments || ''
@@ -231,7 +253,7 @@ export default function App() {
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryData), "Overview");
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(timesheetData), "Timesheet Details");
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(timesheetData, { cellDates: true }), "Timesheet Details");
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(projectData), "Projects Summary");
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(adhocProjectData), "Adhoc Projects");
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(fteProjectData), "FTE Projects");
@@ -410,13 +432,13 @@ export default function App() {
   const pages = {
     dashboard: {
       label: 'Dashboard',
-      content: <Dashboard summary={summary} resources={filteredResources} projects={filteredProjects} brands={brands} markets={markets} filters={filters} timesheets={timesheets} showAnalytics={true} currencyConfig={currencyConfig} />
+      content: <Dashboard summary={summary} resources={filteredResources} projects={filteredProjects} brands={brands} markets={markets} filters={filters} timesheets={timesheets} showAnalytics={true} currencyConfig={currencyConfig} ippBudget={ippBudget} />
     },
     timesheet: {
       label: 'Timesheet',
       content: (
         <>
-          <Dashboard summary={summary} resources={filteredResources} projects={filteredProjects} brands={brands} markets={markets} filters={filters} timesheets={timesheets} currencyConfig={currencyConfig} />
+          <Dashboard summary={summary} resources={filteredResources} projects={filteredProjects} brands={brands} markets={markets} filters={filters} timesheets={timesheets} currencyConfig={currencyConfig} ippBudget={ippBudget} />
           <TimesheetForm
             resources={filteredResources}
             projects={filteredProjects}
@@ -471,6 +493,8 @@ export default function App() {
           brands={brands}
           summary={summary}
           currencyConfig={currencyConfig}
+          timesheets={timesheets}
+          filters={filters}
           onCreate={(body) => create('/projects', body)}
           onUpdate={(id, body) => update('/projects', id, body)}
           onDelete={(id) => remove('/projects', id)}
@@ -526,7 +550,7 @@ export default function App() {
     },
     settings: {
       label: 'Settings',
-      content: <SettingsPage theme={theme} setTheme={setTheme} />
+      content: <SettingsPage theme={theme} setTheme={setTheme} ippBudget={ippBudget} setIppBudget={handleUpdateIppBudget} />
     }
   };
 

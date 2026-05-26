@@ -16,13 +16,110 @@ import {
 
 const statusOptions = ['In Pipeline', 'On Hold', 'In Progress', 'Delivered', 'Cancelled'];
 
-export default function ProjectsPage({ projects, markets, brands, summary, onCreate, onUpdate, onDelete, currencyConfig = { rate: 1, symbol: '$', code: 'USD' } }) {
+export default function ProjectsPage({ projects, markets, brands, summary, onCreate, onUpdate, onDelete, currencyConfig = { rate: 1, symbol: '$', code: 'USD' }, timesheets = [], filters }) {
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState('');
   const [form, setForm] = useState(initialForm());
   const [editForm, setEditForm] = useState(initialForm());
   const visibleProjects = projects.filter((project) => project.name.toLowerCase().includes(search.toLowerCase()));
   const activeProjects = projects.filter((project) => !['Delivered', 'Cancelled'].includes(project.status)).length;
+
+  const metricsDeltas = React.useMemo(() => {
+    const idVal = (val) => {
+      if (!val) return '';
+      return typeof val === 'string' ? val : val._id || String(val);
+    };
+
+    const toDateStr = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    let diffDays = 30;
+    if (filters?.startDate && filters?.endDate) {
+      const start = new Date(filters.startDate + 'T00:00:00');
+      const end = new Date(filters.endDate + 'T00:00:00');
+      const diffTime = end.getTime() - start.getTime();
+      diffDays = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1);
+    }
+
+    let prevStartStr = '';
+    let prevEndStr = '';
+    let periodLabel = 'vs last period';
+
+    if (filters?.startDate && filters?.endDate) {
+      const start = new Date(filters.startDate + 'T00:00:00');
+      const prevEnd = new Date(start);
+      prevEnd.setDate(start.getDate() - 1);
+      
+      const prevStart = new Date(prevEnd);
+      prevStart.setDate(prevEnd.getDate() - diffDays + 1);
+
+      prevStartStr = toDateStr(prevStart);
+      prevEndStr = toDateStr(prevEnd);
+
+      if (diffDays <= 8) {
+        periodLabel = 'vs last 7 days';
+      } else if (diffDays <= 32) {
+        periodLabel = 'vs last month';
+      } else if (diffDays <= 95) {
+        periodLabel = 'vs last 90 days';
+      } else if (diffDays <= 185) {
+        periodLabel = 'vs last 6 months';
+      } else {
+        periodLabel = 'vs last year';
+      }
+    }
+
+    // Filter timesheets for current and previous period timezone-agnostically
+    const currentEntries = timesheets.filter(entry => {
+      const d = entry.date.slice(0, 10);
+      const matchesDate = d >= filters?.startDate && d <= filters?.endDate;
+      const matchesMarket = !filters?.marketId || idVal(entry.projectId?.marketId || entry.projectId) === filters.marketId;
+      return matchesDate && matchesMarket;
+    });
+
+    const previousEntries = timesheets.filter(entry => {
+      const d = entry.date.slice(0, 10);
+      const matchesDate = d >= prevStartStr && d <= prevEndStr;
+      const matchesMarket = !filters?.marketId || idVal(entry.projectId?.marketId || entry.projectId) === filters.marketId;
+      return matchesDate && matchesMarket;
+    });
+
+    // 1. Total Projects
+    const curProjTotal = projects.length;
+    const prevProjTotal = projects.filter(p => !p.startDate || p.startDate.slice(0, 10) <= prevEndStr).length;
+    const projTotalDelta = prevProjTotal > 0 ? ((curProjTotal - prevProjTotal) / prevProjTotal) * 100 : (curProjTotal > 0 ? 100 : 0);
+
+    // 2. Active Projects
+    const curActiveProj = projects.filter(p => !['Delivered', 'Cancelled'].includes(p.status)).length;
+    const prevActiveProj = projects.filter(p => {
+      const pStart = p.startDate ? p.startDate.slice(0, 10) : '';
+      const pEnd = p.endDate ? p.endDate.slice(0, 10) : '';
+      return (!pStart || pStart <= prevEndStr) && (!pEnd || pEnd >= prevStartStr) && p.status !== 'Cancelled';
+    }).length;
+    const activeProjDelta = prevActiveProj > 0 ? ((curActiveProj - prevActiveProj) / prevActiveProj) * 100 : (curActiveProj > 0 ? 100 : 0);
+
+    // 3. Total Hours
+    const curHrs = currentEntries.reduce((sum, entry) => sum + (entry.hoursWorked || 0), 0);
+    const prevHrs = previousEntries.reduce((sum, entry) => sum + (entry.hoursWorked || 0), 0);
+    const hrsDelta = prevHrs > 0 ? ((curHrs - prevHrs) / prevHrs) * 100 : (curHrs > 0 ? 100 : 0);
+
+    // 4. Total Budgeted (Revenue)
+    const curRev = currentEntries.reduce((sum, entry) => sum + (entry.revenue || 0), 0);
+    const prevRev = previousEntries.reduce((sum, entry) => sum + (entry.revenue || 0), 0);
+    const revDelta = prevRev > 0 ? ((curRev - prevRev) / prevRev) * 100 : (curRev > 0 ? 100 : 0);
+
+    return {
+      periodLabel,
+      totalProjectsDelta: projTotalDelta,
+      activeProjectsDelta: activeProjDelta,
+      totalHoursDelta: hrsDelta,
+      totalBudgetedDelta: revDelta
+    };
+  }, [filters?.startDate, filters?.endDate, filters?.marketId, timesheets, projects]);
 
   async function submit(event) {
     event.preventDefault();
@@ -67,10 +164,10 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
       
       {/* Visual Banners */}
       <section className="project-metrics">
-        <ProjectMetric tone="purple" label="Total Projects" value={projects.length} delta="+12.5%" icon={<FolderPlus size={18} />} />
-        <ProjectMetric tone="green" label="Active Projects" value={activeProjects} delta="+8.2%" icon={<Briefcase size={18} />} />
-        <ProjectMetric tone="amber" label="Total Hours" value={`${number(summary.totalHours)}h`} delta="+10.3%" icon={<Clock size={18} />} />
-        <ProjectMetric tone="red" label="Total Budgeted" value={currency(summary.totalRevenue, currencyConfig)} delta="+12.5%" icon={<Coins size={18} />} />
+        <ProjectMetric tone="purple" label="Total Projects" value={projects.length} deltaVal={metricsDeltas.totalProjectsDelta} periodLabel={metricsDeltas.periodLabel} icon={<FolderPlus size={18} />} />
+        <ProjectMetric tone="green" label="Active Projects" value={activeProjects} deltaVal={metricsDeltas.activeProjectsDelta} periodLabel={metricsDeltas.periodLabel} icon={<Briefcase size={18} />} />
+        <ProjectMetric tone="amber" label="Total Hours" value={`${number(summary.totalHours)}h`} deltaVal={metricsDeltas.totalHoursDelta} periodLabel={metricsDeltas.periodLabel} icon={<Clock size={18} />} />
+        <ProjectMetric tone="red" label="Total Budgeted" value={currency(summary.totalRevenue, currencyConfig)} deltaVal={metricsDeltas.totalBudgetedDelta} periodLabel={metricsDeltas.periodLabel} icon={<Coins size={18} />} />
       </section>
 
       {/* Add New Project Card */}
@@ -258,14 +355,21 @@ export default function ProjectsPage({ projects, markets, brands, summary, onCre
   );
 }
 
-function ProjectMetric({ tone, label, value, delta, icon }) {
+function ProjectMetric({ tone, label, value, deltaVal = 0, periodLabel, icon }) {
+  const isPositive = deltaVal > 0;
+  const isNegative = deltaVal < 0;
+  const deltaClass = isPositive ? 'positive' : isNegative ? 'negative' : '';
+  const deltaText = isPositive ? `+${deltaVal.toFixed(1)}%` : isNegative ? `${deltaVal.toFixed(1)}%` : '0.0%';
+
   return (
     <div className={`project-metric ${tone}`}>
       <span className="project-metric-icon">{icon}</span>
       <div>
         <span>{label}</span>
         <strong>{value}</strong>
-        <small>{delta} <em>vs last month</em></small>
+        <small className={deltaClass}>
+          {deltaText} <em>{periodLabel}</em>
+        </small>
       </div>
     </div>
   );

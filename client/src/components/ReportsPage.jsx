@@ -99,21 +99,202 @@ export default function ReportsPage({ timesheets, projects, resources, markets, 
   }
 
   function exportExcel() {
-    const data = filteredData.map(entry => {
-      const res = resources.find(r => r._id === (entry.resourceId?._id || entry.resourceId));
-      const proj = projects.find(p => p._id === (entry.projectId?._id || entry.projectId));
+    const idValue = (x) => x?._id || x || '';
+
+    // Calculate summary dynamically based on filteredData (timesheets matching active filters)
+    let totalRevenue = 0;
+    let totalHours = 0;
+    const resourceMap = {};
+    const projectMap = {};
+
+    filteredData.forEach(entry => {
+      totalRevenue += entry.revenue || 0;
+      totalHours += entry.hoursWorked || 0;
+
+      // Group by resource
+      const resId = idValue(entry.resourceId);
+      const res = resources.find(r => r._id === resId);
+      if (res) {
+        if (!resourceMap[res.name]) {
+          resourceMap[res.name] = { name: res.name, revenue: 0, hours: 0 };
+        }
+        resourceMap[res.name].revenue += entry.revenue || 0;
+        resourceMap[res.name].hours += entry.hoursWorked || 0;
+      }
+
+      // Group by project
+      const projId = idValue(entry.projectId);
+      const proj = projects.find(p => p._id === projId);
+      if (proj) {
+        if (!projectMap[proj._id]) {
+          projectMap[proj._id] = { _id: proj._id, revenue: 0, hours: 0 };
+        }
+        projectMap[proj._id].revenue += entry.revenue || 0;
+        projectMap[proj._id].hours += entry.hoursWorked || 0;
+      }
+    });
+
+    const localSummary = {
+      totalRevenue,
+      totalHours,
+      revenueByResource: Object.values(resourceMap),
+      revenueByProject: Object.values(projectMap)
+    };
+
+    const getProjectRevenueInPeriod = (proj) => {
+      if (proj.projectType === 'fte') {
+        const pRevObj = localSummary.revenueByProject?.find(p => p._id === proj._id);
+        return pRevObj?.revenue || 0;
+      } else {
+        let rev = 0;
+        if (proj.billingType === 'fixed') {
+          rev += proj.fixedBudget || 0;
+        }
+        if (proj.totalBudget > 0) {
+          rev += proj.quarterlyBilledAmount || 0;
+        }
+        return rev;
+      }
+    };
+
+    const reportsFilteredProjects = projects.filter(proj => {
+      if (filters.projectId && proj._id !== filters.projectId) return false;
+      if (filters.marketId && idValue(proj.marketId) !== filters.marketId) return false;
+      if (filters.brandId && idValue(proj.brandId) !== filters.brandId) return false;
+      return true;
+    });
+
+    const reportsFilteredResources = resources.filter(res => {
+      if (filters.resourceId && res._id !== filters.resourceId) return false;
+      if (filters.marketId && idValue(res.marketId) !== filters.marketId) return false;
+      return true;
+    });
+
+    // Sheet 1: Overview Summary
+    const summaryData = [
+      { Metric: 'Total Revenue', Value: currencyConfig.symbol + localSummary.totalRevenue.toLocaleString() },
+      { Metric: 'Total Hours Worked', Value: localSummary.totalHours + ' hrs' },
+      { Metric: 'Active Resources', Value: reportsFilteredResources.length },
+      { Metric: 'Active Projects', Value: reportsFilteredProjects.length },
+      { Metric: 'Reporting Start Date', Value: filters.startDate ? formatFilenameDate(filters.startDate) : 'All Start Dates' },
+      { Metric: 'Reporting End Date', Value: filters.endDate ? formatFilenameDate(filters.endDate) : 'All End Dates' },
+      { Metric: 'Filtered Market', Value: markets.find(m => m._id === filters.marketId)?.name || 'All Markets' }
+    ];
+
+    // Sheet 2: Timesheet Details
+    const timesheetData = filteredData.map(entry => {
+      const res = resources.find(r => r._id === idValue(entry.resourceId));
+      const proj = projects.find(p => p._id === idValue(entry.projectId));
+      const marketObj = proj ? markets.find(m => m._id === idValue(proj.marketId)) : null;
+      const brandObj = proj ? brands.find(b => b._id === idValue(proj.brandId)) : null;
+
+      const dStr = entry.date.slice(0, 10);
+      const y = parseInt(dStr.slice(0, 4));
+      const m = parseInt(dStr.slice(5, 7)) - 1;
+      const d = parseInt(dStr.slice(8, 10));
+
       return {
-        Date: entry.date.slice(0, 10),
-        Resource: res?.name || '',
+        Date: new Date(y, m, d),
+        'Resource Name': res?.name || '',
+        'Resource Designation': res?.designation || '',
+        Market: marketObj ? `${marketObj.flag || ''} ${marketObj.name}`.trim() : (entry.leaveType ? 'Paid Leave' : 'Global / Core'),
+        Brand: brandObj?.name || 'Corporate',
         'Type / Project': entry.leaveType || proj?.name || '',
-        Hours: entry.hoursWorked,
-        Revenue: entry.revenue,
+        'Project Type': proj ? ((proj.projectType || 'adhoc') === 'fte' ? 'FTE Project' : 'Adhoc Project') : (entry.leaveType ? 'Leave' : '-'),
+        'Billing Type': proj ? (proj.billingType === 'fixed' ? 'Fixed Budget' : 'Hourly Rate') : (entry.leaveType ? 'Paid Leave' : '-'),
+        'Hours Worked': entry.hoursWorked,
+        'Calculated Revenue': entry.revenue,
         Comments: entry.comments || ''
       };
     });
-    const worksheet = XLSX.utils.json_to_sheet(data);
+
+    // Sheet 3: Project Summary
+    const projectData = reportsFilteredProjects.map(proj => {
+      const marketObj = markets.find(m => m._id === idValue(proj.marketId));
+      const brandObj = brands.find(b => b._id === idValue(proj.brandId));
+      const pHours = localSummary.revenueByProject?.find(p => p._id === proj._id)?.hours || 0;
+      return {
+        'Project Name': proj.name,
+        'Point of Contact': proj.pointOfContact || '',
+        'Project Type': (proj.projectType || 'adhoc') === 'fte' ? 'FTE Project' : 'Adhoc Project',
+        Market: marketObj ? `${marketObj.flag || ''} ${marketObj.name}`.trim() : 'Global / Core',
+        Brand: brandObj?.name || 'Corporate',
+        'Billing Type': proj.billingType === 'fixed' ? 'Fixed Budget' : 'Hourly Rate',
+        'Total Approved Budget': proj.totalBudget || 0,
+        'Calculated Consumed Budget': proj.consumedBudget || 0,
+        'Calculated Remaining Budget': (proj.totalBudget || 0) - (proj.consumedBudget || 0),
+        'Revenue Earned in Period': getProjectRevenueInPeriod(proj),
+        'Hours Spent in Period': pHours,
+        Status: proj.status
+      };
+    });
+
+    // Sheet 3a: Adhoc Projects Details
+    const adhocProjectData = reportsFilteredProjects
+      .filter(proj => (proj.projectType || 'adhoc') === 'adhoc')
+      .map(proj => {
+        const marketObj = markets.find(m => m._id === idValue(proj.marketId));
+        const brandObj = brands.find(b => b._id === idValue(proj.brandId));
+        const pHours = localSummary.revenueByProject?.find(p => p._id === proj._id)?.hours || 0;
+        return {
+          'Project Name': proj.name,
+          'Point of Contact': proj.pointOfContact || '',
+          Market: marketObj ? `${marketObj.flag || ''} ${marketObj.name}`.trim() : 'Global / Core',
+          Brand: brandObj?.name || 'Corporate',
+          'Billing Type': proj.billingType === 'fixed' ? 'Fixed Budget' : 'Hourly Rate',
+          'Total Approved Budget': proj.totalBudget || 0,
+          'Calculated Consumed Budget': proj.consumedBudget || 0,
+          'Calculated Remaining Budget': (proj.totalBudget || 0) - (proj.consumedBudget || 0),
+          'Revenue Earned in Period': getProjectRevenueInPeriod(proj),
+          'Hours Spent in Period': pHours,
+          Status: proj.status
+        };
+      });
+
+    // Sheet 3b: FTE Projects Details
+    const fteProjectData = reportsFilteredProjects
+      .filter(proj => proj.projectType === 'fte')
+      .map(proj => {
+        const marketObj = markets.find(m => m._id === idValue(proj.marketId));
+        const brandObj = brands.find(b => b._id === idValue(proj.brandId));
+        const pHours = localSummary.revenueByProject?.find(p => p._id === proj._id)?.hours || 0;
+        return {
+          'Project Name': proj.name,
+          'Point of Contact': proj.pointOfContact || '',
+          Market: marketObj ? `${marketObj.flag || ''} ${marketObj.name}`.trim() : 'Global / Core',
+          Brand: brandObj?.name || 'Corporate',
+          'Billing Type': proj.billingType === 'fixed' ? 'Fixed Budget' : 'Hourly Rate',
+          'Total Approved Budget': proj.totalBudget || 0,
+          'Calculated Consumed Budget': proj.consumedBudget || 0,
+          'Calculated Remaining Budget': (proj.totalBudget || 0) - (proj.consumedBudget || 0),
+          'Revenue Earned in Period': getProjectRevenueInPeriod(proj),
+          'Hours Spent in Period': pHours,
+          Status: proj.status
+        };
+      });
+
+    // Sheet 4: Resource Summary
+    const resourceSummaryData = reportsFilteredResources.map(res => {
+      const marketObj = markets.find(m => m._id === idValue(res.marketId));
+      const resRev = localSummary.revenueByResource?.find(r => r.name === res.name)?.revenue || 0;
+      const resHours = localSummary.revenueByResource?.find(r => r.name === res.name)?.hours || 0;
+      return {
+        'Resource Name': res.name,
+        Designation: res.designation || '',
+        'Default Market': marketObj ? `${marketObj.flag || ''} ${marketObj.name}`.trim() : '-',
+        'Hourly Rate': res.hourlyRate || 0,
+        'Hours in Period': resHours,
+        'Revenue in Period': resRev
+      };
+    });
+
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Reports");
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryData), "Overview");
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(timesheetData, { cellDates: true }), "Timesheet Details");
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(projectData), "Projects Summary");
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(adhocProjectData), "Adhoc Projects");
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(fteProjectData), "FTE Projects");
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(resourceSummaryData), "Resources Summary");
     XLSX.writeFile(workbook, getExportFilename('xlsx'));
   }
 
