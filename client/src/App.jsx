@@ -626,9 +626,14 @@ export default function App() {
   }
   
   // Make sure activePage is valid
-  if (!pages[activePage]) {
-    setActivePage(Object.keys(pages)[0] || 'timesheet');
-  }
+  const safeActivePage = pages[activePage] ? activePage : (Object.keys(pages)[0] || 'timesheet');
+  const currentPage = pages[safeActivePage] || allPages.timesheet;
+
+  useEffect(() => {
+    if (activePage !== safeActivePage) {
+      setActivePage(safeActivePage);
+    }
+  }, [activePage, safeActivePage]);
 
   const pageIcons = {
     dashboard: <LayoutDashboard size={18} />,
@@ -698,7 +703,7 @@ export default function App() {
       <main>
         <header className="topbar">
           <div>
-            <h2>{pages[activePage].label}</h2>
+            <h2>{currentPage.label}</h2>
             <p>Track time, manage projects, calculate revenue.</p>
           </div>
           {activePage !== 'reports' && activePage !== 'settings' && (
@@ -776,7 +781,7 @@ export default function App() {
 
 
         {error && <div className="error">{error}</div>}
-        {pages[activePage].content}
+        {currentPage.content}
       </main>
     </div>
   );
