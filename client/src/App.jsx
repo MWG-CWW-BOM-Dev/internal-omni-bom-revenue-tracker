@@ -7,6 +7,8 @@ import BudgetTracker from './components/BudgetTracker.jsx';
 import ReportsPage from './components/ReportsPage.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import CustomSelect from './components/CustomSelect.jsx';
+import LoginPage from './components/LoginPage.jsx';
+import UserManagement from './components/UserManagement.jsx';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -21,6 +23,8 @@ import {
   Users,
   FileBarChart,
   Settings,
+  Shield,
+  LogOut,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -55,6 +59,37 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
   const exportDropdownRef = useRef(null);
+
+  // Auth State
+  const [token, setToken] = useState(localStorage.getItem('token') || null);
+  const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')) || null);
+
+  useEffect(() => {
+    const handleAuthError = () => {
+      setToken(null);
+      setUser(null);
+    };
+    window.addEventListener('auth_error', handleAuthError);
+    return () => window.removeEventListener('auth_error', handleAuthError);
+  }, []);
+
+  const handleLogin = (newToken, newUser) => {
+    localStorage.setItem('token', newToken);
+    localStorage.setItem('user', JSON.stringify(newUser));
+    setToken(newToken);
+    setUser(newUser);
+    // Ensure active page is allowed
+    if (newUser.role !== 'superadmin' && !newUser.permissions.includes(activePage)) {
+      setActivePage(newUser.permissions[0] || 'timesheet');
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setToken(null);
+    setUser(null);
+  };
 
   const [ippBudget, setIppBudget] = useState(() => {
     const saved = localStorage.getItem('ipp_budget');
@@ -319,6 +354,7 @@ export default function App() {
 
 
   async function loadAll() {
+    if (!token) return;
     try {
       const [marketData, brandData, projectData, resourceData, timesheetData] = await Promise.all([
         api.list('/markets'),
@@ -334,26 +370,35 @@ export default function App() {
       setTimesheets(timesheetData);
       setError('');
     } catch (err) {
-      setError(err.message);
+      if (err.message !== 'Request failed') {
+        setError(err.message);
+      }
     }
   }
 
   async function loadDashboard() {
+    if (!token) return;
     try {
       setSummary(await api.dashboard(filters));
       setError('');
     } catch (err) {
-      setError(err.message);
+      if (err.message !== 'Request failed') {
+        setError(err.message);
+      }
     }
   }
 
   useEffect(() => {
-    loadAll();
-  }, []);
+    if (token) {
+      loadAll();
+    }
+  }, [token]);
 
   useEffect(() => {
-    loadDashboard();
-  }, [filters]);
+    if (token) {
+      loadDashboard();
+    }
+  }, [filters, token]);
 
   useEffect(() => {
     window.reloadApp = async () => {
@@ -429,7 +474,11 @@ export default function App() {
   });
   const calendarDates = buildDateRange(filters.startDate, filters.endDate);
 
-  const pages = {
+  if (!token || !user) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
+  const allPages = {
     dashboard: {
       label: 'Dashboard',
       content: <Dashboard summary={summary} resources={filteredResources} projects={filteredProjects} brands={brands} markets={markets} filters={filters} timesheets={timesheets} showAnalytics={true} currencyConfig={currencyConfig} ippBudget={ippBudget} />
@@ -554,6 +603,33 @@ export default function App() {
     }
   };
 
+  if (user.role === 'superadmin') {
+    allPages.users = {
+      label: 'User Management',
+      content: <UserManagement currentUser={user} />
+    };
+  }
+
+  // Filter pages based on user role and permissions
+  const pages = {};
+  if (user.role === 'superadmin') {
+    Object.assign(pages, allPages);
+  } else {
+    // Standard user gets only what's in permissions
+    user.permissions.forEach(p => {
+      if (allPages[p]) pages[p] = allPages[p];
+    });
+    // Fallback if no permissions matched
+    if (Object.keys(pages).length === 0 && allPages.timesheet) {
+      pages.timesheet = allPages.timesheet;
+    }
+  }
+  
+  // Make sure activePage is valid
+  if (!pages[activePage]) {
+    setActivePage(Object.keys(pages)[0] || 'timesheet');
+  }
+
   const pageIcons = {
     dashboard: <LayoutDashboard size={18} />,
     timesheet: <Calendar size={18} />,
@@ -563,7 +639,8 @@ export default function App() {
     budget: <DollarSign size={18} />,
     resources: <Users size={18} />,
     reports: <FileBarChart size={18} />,
-    settings: <Settings size={18} />
+    settings: <Settings size={18} />,
+    users: <Shield size={18} />
   };
 
   return (
@@ -591,19 +668,30 @@ export default function App() {
             ))}
           </nav>
         </div>
-        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <label style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.05em' }}>Currency</label>
-          <CustomSelect 
-            value={activeCurrency} 
-            onChange={(val) => setActiveCurrency(val)}
-            options={[
-              { value: 'USD', label: 'USD ($)' },
-              { value: 'INR', label: 'INR (₹)' },
-              { value: 'CAD', label: 'CAD (C$)' }
-            ]}
-            placeholder="Select Currency"
-            direction="up"
-          />
+        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.05em' }}>Currency</label>
+            <CustomSelect 
+              value={activeCurrency} 
+              onChange={(val) => setActiveCurrency(val)}
+              options={[
+                { value: 'USD', label: 'USD ($)' },
+                { value: 'INR', label: 'INR (₹)' },
+                { value: 'CAD', label: 'CAD (C$)' }
+              ]}
+              placeholder="Select Currency"
+              direction="up"
+            />
+          </div>
+          <div style={{ padding: '12px 16px', background: 'var(--bg)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid var(--border)' }}>
+            <div style={{ overflow: 'hidden' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fg)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{user.username}</div>
+              <div style={{ fontSize: '11px', color: 'var(--muted)', textTransform: 'capitalize' }}>{user.role}</div>
+            </div>
+            <button className="icon-button danger" onClick={handleLogout} title="Sign Out">
+              <LogOut size={16} />
+            </button>
+          </div>
         </div>
       </aside>
 

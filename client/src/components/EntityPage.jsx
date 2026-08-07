@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import CustomSelect from './CustomSelect.jsx';
+import { api } from '../services/api.js';
 import { Plus, Edit2, Trash2, Check, X } from 'lucide-react';
 
 export default function EntityPage({ title, fields, items, onCreate, onUpdate, onDelete }) {
@@ -154,7 +155,7 @@ function FieldControl({ field, value, onChange, compact = false }) {
       const reader = new FileReader();
       reader.onloadend = async () => {
         try {
-          const res = await fetch('http://localhost:5000/upload', {
+          const res = await fetch(`${api.baseUrl}/upload`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ image: reader.result })

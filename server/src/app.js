@@ -7,6 +7,8 @@ import projectRoutes from './routes/projects.js';
 import resourceRoutes from './routes/resources.js';
 import timesheetRoutes from './routes/timesheets.js';
 import projectRequestRoutes from './routes/projectRequests.js';
+import authRoutes from './routes/auth.js';
+import { authenticateToken } from './middleware/auth.js';
 
 import fs from 'fs';
 import path from 'path';
@@ -23,7 +25,7 @@ if (!fs.existsSync(uploadsDir)) {
 }
 app.use('/uploads', express.static(uploadsDir));
 
-app.post('/upload', (req, res) => {
+app.post('/api/upload', (req, res) => {
   try {
     const { image } = req.body;
     if (!image) return res.status(400).json({ message: 'No image provided' });
@@ -40,24 +42,29 @@ app.post('/upload', (req, res) => {
     const filepath = path.join(uploadsDir, filename);
 
     fs.writeFileSync(filepath, buffer);
-    res.json({ url: `http://localhost:${process.env.PORT || 5000}/uploads/${filename}` });
+    res.json({ url: `/uploads/${filename}` });
   } catch (err) {
     console.error('Upload error:', err);
     res.status(500).json({ message: 'Failed to upload image' });
   }
 });
 
-app.get('/health', (_req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.use('/markets', marketRoutes);
-app.use('/brands', brandRoutes);
-app.use('/projects', projectRoutes);
-app.use('/project-requests', projectRequestRoutes);
-app.use('/resources', resourceRoutes);
-app.use('/timesheets', timesheetRoutes);
-app.use('/dashboard', dashboardRoutes);
+app.use('/api/auth', authRoutes);
+
+// Protect all following routes with authentication
+app.use(authenticateToken);
+
+app.use('/api/markets', marketRoutes);
+app.use('/api/brands', brandRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/project-requests', projectRequestRoutes);
+app.use('/api/resources', resourceRoutes);
+app.use('/api/timesheets', timesheetRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 app.use((error, _req, res, _next) => {
   const status = error.status || 500;
