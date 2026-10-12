@@ -735,6 +735,7 @@ td:last-child,
 }
 
 .scheduler-panel {
+  position: relative;
   padding: 0;
   overflow: hidden;
   margin-top: 24px;
@@ -1254,6 +1255,23 @@ html[data-theme="light"] .drag-handle:hover {
   border-color: var(--danger);
   box-shadow: 0 4px 10px rgba(220, 38, 38, 0.2);
   transform: none;
+}
+
+.delete-time.is-deleting {
+  opacity: 1 !important;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: var(--surface-strong);
+  color: var(--danger);
+  border-color: var(--danger);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.35);
+}
+
+.time-block.is-deleting {
+  opacity: 0.55;
+  pointer-events: none;
+  filter: grayscale(0.5);
+  transition: opacity 150ms ease, filter 150ms ease;
 }
 
 .time-block strong {
@@ -1887,4 +1905,83 @@ html[data-theme="dark"] .type-pill.fte {
 .badge.gray {
   background-color: var(--border);
   color: var(--muted);
+}
+
+/* Scheduler Loading Bar & Universal Loader Toast */
+.scheduler-loading-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #6366f1 0%, #a855f7 50%, #6366f1 100%);
+  background-size: 200% 100%;
+  animation: schedulerBarShimmer 1.2s linear infinite;
+  z-index: 100;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.7);
+}
+
+@keyframes schedulerBarShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.universal-loader-toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  pointer-events: none;
+  animation: universalLoaderEnter 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.universal-loader-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px 8px 14px;
+  background: rgba(17, 24, 39, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  border-radius: 9999px;
+  box-shadow:
+    0 10px 25px -5px rgba(0, 0, 0, 0.6),
+    0 0 16px rgba(99, 102, 241, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+html[data-theme="light"] .universal-loader-content {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow:
+    0 10px 25px -5px rgba(0, 0, 0, 0.1),
+    0 0 16px rgba(99, 102, 241, 0.15);
+  color: #0f172a;
+}
+
+.universal-loader-spinner {
+  color: #818cf8;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes universalLoaderEnter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
 }

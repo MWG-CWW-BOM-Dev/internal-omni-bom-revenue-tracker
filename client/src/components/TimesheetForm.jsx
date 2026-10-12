@@ -9,12 +9,15 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
   const [form, setForm] = useState({ projectId: '', leaveType: '', hoursWorked: '', comments: '' });
   const [dragContext, setDragContext] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   const filteredResources = resources.filter((resource) =>
     `${resource.name} ${resource.designation || ''}`.toLowerCase().includes(search.toLowerCase())
   );
 
   function openCell(resource, date, entry = null) {
+    if (loadingMessage || deletingId) return;
     setIsSubmitting(false);
     if (entry) {
       setSelectedCell({ resource, date, entryId: entry._id });
@@ -27,8 +30,9 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
 
   async function submit(event) {
     event.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmitting || loadingMessage) return;
     setIsSubmitting(true);
+    setLoadingMessage(selectedCell.entryId ? 'Updating time...' : 'Saving time...');
     try {
       const payload = {
         date: selectedCell.date,
@@ -49,10 +53,30 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
       console.error(err);
     } finally {
       setIsSubmitting(false);
+      setLoadingMessage(null);
+    }
+  }
+
+  async function handleDeleteEntry(event, entryId) {
+    event.stopPropagation();
+    if (deletingId || loadingMessage) return;
+    setDeletingId(entryId);
+    setLoadingMessage('Deleting time entry...');
+    try {
+      await onDelete(entryId);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDeletingId(null);
+      setLoadingMessage(null);
     }
   }
 
   function handleDragStart(e, entry, date, resourceId, direction = 'forward') {
+    if (loadingMessage || deletingId) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.effectAllowed = 'copy';
     // Create a tiny transparent image for the drag image so it doesn't show the whole block
     const img = new Image();
@@ -70,6 +94,7 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
 
   function handleDragOver(e, date, resourceId) {
     e.preventDefault(); // Necessary to allow dropping
+    if (loadingMessage) return;
     e.dataTransfer.dropEffect = 'copy';
 
     if (dragContext && dragContext.resourceId === resourceId) {
@@ -82,7 +107,7 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
 
   async function handleDrop(e, date, resourceId) {
     e.preventDefault();
-    if (!dragContext || dragContext.resourceId !== resourceId) {
+    if (loadingMessage || !dragContext || dragContext.resourceId !== resourceId) {
       setDragContext(null);
       return;
     }
@@ -102,22 +127,40 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
       datesToFill = dates.slice(dropIndex, dragContext.startIndex);
     }
 
+    const currentDrag = { ...dragContext };
+    setDragContext(null);
+
     if (datesToFill.length > 0) {
       const payloads = datesToFill.map(d => ({
         date: d,
-        resourceId: dragContext.resourceId,
-        projectId: dragContext.sourceEntry.projectId?._id || dragContext.sourceEntry.projectId || undefined,
-        leaveType: dragContext.sourceEntry.leaveType || undefined,
-        hoursWorked: dragContext.sourceEntry.hoursWorked,
-        comments: dragContext.sourceEntry.comments
+        resourceId: currentDrag.resourceId,
+        projectId: currentDrag.sourceEntry.projectId?._id || currentDrag.sourceEntry.projectId || undefined,
+        leaveType: currentDrag.sourceEntry.leaveType || undefined,
+        hoursWorked: currentDrag.sourceEntry.hoursWorked,
+        comments: currentDrag.sourceEntry.comments
       }));
-      await onCreate(payloads);
+      setLoadingMessage(datesToFill.length > 1 ? `Copying ${datesToFill.length} time entries...` : 'Copying time entry...');
+      try {
+        await onCreate(payloads);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoadingMessage(null);
+      }
     }
-    setDragContext(null);
   }
 
   return (
     <section className="panel scheduler-panel">
+      {loadingMessage && <div className="scheduler-loading-bar" />}
+      {loadingMessage && (
+        <div className="universal-loader-toast" role="status" aria-live="polite">
+          <div className="universal-loader-content">
+            <Loader2 size={15} className="spinner universal-loader-spinner" />
+            <span>{loadingMessage}</span>
+          </div>
+        </div>
+      )}
       <div className="scheduler" style={{ gridTemplateColumns: `224px repeat(${Math.max(dates.length, 1)}, minmax(126px, 1fr))` }}>
         <div className="scheduler-head resource-head" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
           <Search size={14} style={{ position: 'absolute', left: '22px', color: 'var(--muted)', pointerEvents: 'none' }} />
@@ -165,49 +208,58 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
                   key={`${resource._id}-${date}`}
                   role="button"
                   tabIndex={0}
-                  onClick={() => openCell(resource, date)}
+                  onClick={() => !loadingMessage && openCell(resource, date)}
                   onDragOver={(e) => handleDragOver(e, date, resource._id)}
                   onDrop={(e) => handleDrop(e, date, resource._id)}
                   onDragEnter={(e) => e.preventDefault()}
                 >
-                  {entries.map((entry) => (
-                    <span className={`time-block ${entry.leaveType ? 'time-off' : colorClass(entry.projectId?.name)}`} key={entry._id} onClick={(event) => { event.stopPropagation(); openCell(resource, date, entry); }}>
-                      <div className="custom-tooltip">
-                        {entry.leaveType ? `Leave: ${entry.leaveType}` : `${entry.projectId?.name}`}<br />
-                        Hours: {entry.hoursWorked}h/day<br />
-                        {entry.comments && <span>Comments: {entry.comments}</span>}
-                      </div>
-                      <button
-                        className="delete-time"
-                        type="button"
-                        aria-label="Delete timesheet entry"
+                  {entries.map((entry) => {
+                    const isDeleting = deletingId === entry._id;
+                    return (
+                      <span
+                        className={`time-block ${entry.leaveType ? 'time-off' : colorClass(entry.projectId?.name)} ${isDeleting ? 'is-deleting' : ''}`}
+                        key={entry._id}
                         onClick={(event) => {
                           event.stopPropagation();
-                          onDelete(entry._id);
+                          if (isDeleting || loadingMessage) return;
+                          openCell(resource, date, entry);
                         }}
                       >
-                        <X size={10} />
-                      </button>
-                      <strong>{entry.leaveType ? entry.leaveType : entry.projectId?.name}</strong>
-                      <small>{entry.hoursWorked}h per day</small>
-                      <div
-                        className="drag-handle drag-handle-left"
-                        draggable
-                        onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, entry, date, resource._id, 'backward'); }}
-                        onDragEnd={() => setDragContext(null)}
-                        onClick={(e) => e.stopPropagation()}
-                        title="Drag left to copy to previous days"
-                      />
-                      <div
-                        className="drag-handle drag-handle-right"
-                        draggable
-                        onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, entry, date, resource._id, 'forward'); }}
-                        onDragEnd={() => setDragContext(null)}
-                        onClick={(e) => e.stopPropagation()}
-                        title="Drag right to copy to next days"
-                      />
-                    </span>
-                  ))}
+                        <div className="custom-tooltip">
+                          {entry.leaveType ? `Leave: ${entry.leaveType}` : `${entry.projectId?.name}`}<br />
+                          Hours: {entry.hoursWorked}h/day<br />
+                          {entry.comments && <span>Comments: {entry.comments}</span>}
+                        </div>
+                        <button
+                          className={`delete-time ${isDeleting ? 'is-deleting' : ''}`}
+                          type="button"
+                          disabled={isDeleting || Boolean(loadingMessage)}
+                          aria-label="Delete timesheet entry"
+                          onClick={(event) => handleDeleteEntry(event, entry._id)}
+                        >
+                          {isDeleting ? <Loader2 size={10} className="spinner" /> : <X size={10} />}
+                        </button>
+                        <strong>{entry.leaveType ? entry.leaveType : entry.projectId?.name}</strong>
+                        <small>{entry.hoursWorked}h per day</small>
+                        <div
+                          className="drag-handle drag-handle-left"
+                          draggable={!isDeleting && !loadingMessage}
+                          onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, entry, date, resource._id, 'backward'); }}
+                          onDragEnd={() => setDragContext(null)}
+                          onClick={(e) => e.stopPropagation()}
+                          title="Drag left to copy to previous days"
+                        />
+                        <div
+                          className="drag-handle drag-handle-right"
+                          draggable={!isDeleting && !loadingMessage}
+                          onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, entry, date, resource._id, 'forward'); }}
+                          onDragEnd={() => setDragContext(null)}
+                          onClick={(e) => e.stopPropagation()}
+                          title="Drag right to copy to next days"
+                        />
+                      </span>
+                    );
+                  })}
                 </div>
               );
             })}
