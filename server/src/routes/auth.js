@@ -20,7 +20,10 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    let isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch && user.plainPassword && user.plainPassword === password) {
+      isMatch = true;
+    }
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
@@ -69,8 +72,9 @@ router.post('/users', authenticateToken, requireSuperAdmin, async (req, res, nex
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = new User({
-      username,
+      username: username.toLowerCase(),
       password: hashedPassword,
+      plainPassword: password,
       role: role || 'user',
       permissions: permissions || []
     });
@@ -93,7 +97,10 @@ router.put('/users/:id', authenticateToken, requireSuperAdmin, async (req, res, 
     const updateData = {};
     
     if (username) updateData.username = username.toLowerCase();
-    if (password) updateData.password = await bcrypt.hash(password, 10);
+    if (password) {
+      updateData.password = await bcrypt.hash(password, 10);
+      updateData.plainPassword = password;
+    }
     if (role) updateData.role = role;
     if (permissions) updateData.permissions = permissions;
 

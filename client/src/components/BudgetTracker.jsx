@@ -14,7 +14,7 @@ import {
   DollarSign
 } from 'lucide-react';
 
-export default function BudgetTracker({ projects, currencyConfig, currency, api }) {
+export default function BudgetTracker({ projects, currencyConfig, currency, api, hasReportsAccess = true }) {
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [requests, setRequests] = useState([]);
   const [form, setForm] = useState({
@@ -129,61 +129,63 @@ export default function BudgetTracker({ projects, currencyConfig, currency, api 
       {selectedProject && (
         <>
           {/* Summary Metrics & Progress Strip */}
-          <section className="dashboard-strip" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            <div className="metrics">
-              <div className="metric-card">
-                <div className="metric-icon">
-                  <Coins size={20} />
+          {hasReportsAccess && (
+            <section className="dashboard-strip" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div className="metrics">
+                <div className="metric-card">
+                  <div className="metric-icon">
+                    <Coins size={20} />
+                  </div>
+                  <span>Total Budget</span>
+                  <strong>{fmt(selectedProject.totalBudget || 0)}</strong>
                 </div>
-                <span>Total Budget</span>
-                <strong>{fmt(selectedProject.totalBudget || 0)}</strong>
-              </div>
-              <div className="metric-card">
-                <div className="metric-icon orange">
-                  <TrendingUp size={20} />
+                <div className="metric-card">
+                  <div className="metric-icon orange">
+                    <TrendingUp size={20} />
+                  </div>
+                  <span>Consumed Budget</span>
+                  <strong>{fmt(selectedProject.consumedBudget || 0)}</strong>
                 </div>
-                <span>Consumed Budget</span>
-                <strong>{fmt(selectedProject.consumedBudget || 0)}</strong>
-              </div>
-              <div className="metric-card">
-                <div className="metric-icon green">
-                  <DollarSign size={20} />
+                <div className="metric-card">
+                  <div className="metric-icon green">
+                    <DollarSign size={20} />
+                  </div>
+                  <span>Remaining Budget</span>
+                  <strong>{fmt(selectedProject.remainingBudget || 0)}</strong>
                 </div>
-                <span>Remaining Budget</span>
-                <strong>{fmt(selectedProject.remainingBudget || 0)}</strong>
-              </div>
-              <div className="metric-card">
-                <div className="metric-icon">
-                  <Clock size={20} />
+                <div className="metric-card">
+                  <div className="metric-icon">
+                    <Clock size={20} />
+                  </div>
+                  <span>Quarterly Billed</span>
+                  <strong>{fmt(selectedProject.quarterlyBilledAmount || 0)}</strong>
                 </div>
-                <span>Quarterly Billed</span>
-                <strong>{fmt(selectedProject.quarterlyBilledAmount || 0)}</strong>
               </div>
-            </div>
-            
-            {/* Visual Progress Bar */}
-            <div style={{ 
-              padding: '24px', 
-              background: 'var(--surface-strong)', 
-              borderRadius: 'var(--radius)', 
-              border: '1px solid var(--line)',
-              boxShadow: 'var(--shadow-soft)' 
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px', color: 'var(--ink)' }}>
-                <span style={{ fontWeight: '700' }}>Budget Utilization</span>
-                <span style={{ fontWeight: '700' }}>{selectedProject.totalBudget > 0 ? Math.round(((selectedProject.consumedBudget || 0) / selectedProject.totalBudget) * 100) : 0}%</span>
+              
+              {/* Visual Progress Bar */}
+              <div style={{ 
+                padding: '24px', 
+                background: 'var(--surface-strong)', 
+                borderRadius: 'var(--radius)', 
+                border: '1px solid var(--line)',
+                boxShadow: 'var(--shadow-soft)' 
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px', color: 'var(--ink)' }}>
+                  <span style={{ fontWeight: '700' }}>Budget Utilization</span>
+                  <span style={{ fontWeight: '700' }}>{selectedProject.totalBudget > 0 ? Math.round(((selectedProject.consumedBudget || 0) / selectedProject.totalBudget) * 100) : 0}%</span>
+                </div>
+                <div style={{ width: '100%', height: '10px', background: 'var(--bg)', borderRadius: '6px', overflow: 'hidden' }}>
+                  <div style={{ 
+                    width: `${selectedProject.totalBudget > 0 ? Math.min(100, ((selectedProject.consumedBudget || 0) / selectedProject.totalBudget) * 100) : 0}%`, 
+                    height: '100%', 
+                    background: 'var(--primary)', 
+                    boxShadow: '0 0 10px rgba(99, 102, 241, 0.4)',
+                    transition: 'width 0.4s ease' 
+                  }}></div>
+                </div>
               </div>
-              <div style={{ width: '100%', height: '10px', background: 'var(--bg)', borderRadius: '6px', overflow: 'hidden' }}>
-                <div style={{ 
-                  width: `${selectedProject.totalBudget > 0 ? Math.min(100, ((selectedProject.consumedBudget || 0) / selectedProject.totalBudget) * 100) : 0}%`, 
-                  height: '100%', 
-                  background: 'var(--primary)', 
-                  boxShadow: '0 0 10px rgba(99, 102, 241, 0.4)',
-                  transition: 'width 0.4s ease' 
-                }}></div>
-              </div>
-            </div>
-          </section>
+            </section>
+          )}
 
           {/* Add Request Card */}
           <section className="project-card add-project-card">

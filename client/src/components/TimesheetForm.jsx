@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import CustomSelect from './CustomSelect.jsx';
-import { Search, X } from 'lucide-react';
+import { Search, X, Loader2 } from 'lucide-react';
 
 
 export default function TimesheetForm({ resources, projects, timesheets, dates, onCreate, onUpdate, onDelete, currencyConfig = { rate: 1, symbol: '$', code: 'USD' } }) {
@@ -8,12 +8,14 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
   const [selectedCell, setSelectedCell] = useState(null);
   const [form, setForm] = useState({ projectId: '', leaveType: '', hoursWorked: '', comments: '' });
   const [dragContext, setDragContext] = useState(null);
-  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const filteredResources = resources.filter((resource) =>
     `${resource.name} ${resource.designation || ''}`.toLowerCase().includes(search.toLowerCase())
   );
 
   function openCell(resource, date, entry = null) {
+    setIsSubmitting(false);
     if (entry) {
       setSelectedCell({ resource, date, entryId: entry._id });
       setForm({ projectId: entry.projectId?._id || entry.projectId || '', leaveType: entry.leaveType || '', hoursWorked: entry.hoursWorked, comments: entry.comments || '' });
@@ -25,24 +27,32 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
 
   async function submit(event) {
     event.preventDefault();
-    const payload = {
-      date: selectedCell.date,
-      resourceId: selectedCell.resource._id,
-      projectId: form.projectId || undefined,
-      leaveType: form.leaveType || undefined,
-      hoursWorked: form.hoursWorked,
-      comments: form.comments
-    };
-    if (selectedCell.entryId) {
-      await onUpdate(selectedCell.entryId, payload);
-    } else {
-      await onCreate(payload);
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        date: selectedCell.date,
+        resourceId: selectedCell.resource._id,
+        projectId: form.projectId || undefined,
+        leaveType: form.leaveType || undefined,
+        hoursWorked: form.hoursWorked,
+        comments: form.comments
+      };
+      if (selectedCell.entryId) {
+        await onUpdate(selectedCell.entryId, payload);
+      } else {
+        await onCreate(payload);
+      }
+      setSelectedCell(null);
+      setForm({ projectId: '', leaveType: '', hoursWorked: '', comments: '' });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
     }
-    setSelectedCell(null);
-    setForm({ projectId: '', leaveType: '', hoursWorked: '', comments: '' });
   }
 
-  function handleDragStart(e, entry, date, resourceId) {
+  function handleDragStart(e, entry, date, resourceId, direction = 'forward') {
     e.dataTransfer.effectAllowed = 'copy';
     // Create a tiny transparent image for the drag image so it doesn't show the whole block
     const img = new Image();
@@ -53,17 +63,18 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
       sourceEntry: entry,
       resourceId: resourceId,
       startIndex: dates.indexOf(date),
-      currentHoverIndex: dates.indexOf(date)
+      currentHoverIndex: dates.indexOf(date),
+      direction
     });
   }
 
   function handleDragOver(e, date, resourceId) {
     e.preventDefault(); // Necessary to allow dropping
     e.dataTransfer.dropEffect = 'copy';
-    
+
     if (dragContext && dragContext.resourceId === resourceId) {
       const hoverIndex = dates.indexOf(date);
-      if (hoverIndex !== dragContext.currentHoverIndex) {
+      if (hoverIndex !== -1 && hoverIndex !== dragContext.currentHoverIndex) {
         setDragContext({ ...dragContext, currentHoverIndex: hoverIndex });
       }
     }
@@ -77,8 +88,21 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
     }
 
     const dropIndex = dates.indexOf(date);
+    if (dropIndex === -1) {
+      setDragContext(null);
+      return;
+    }
+
+    let datesToFill = [];
     if (dropIndex > dragContext.startIndex) {
-      const datesToFill = dates.slice(dragContext.startIndex + 1, dropIndex + 1);
+      // Dragged forward (to future dates)
+      datesToFill = dates.slice(dragContext.startIndex + 1, dropIndex + 1);
+    } else if (dropIndex < dragContext.startIndex) {
+      // Dragged backward (to previous dates)
+      datesToFill = dates.slice(dropIndex, dragContext.startIndex);
+    }
+
+    if (datesToFill.length > 0) {
       const payloads = datesToFill.map(d => ({
         date: d,
         resourceId: dragContext.resourceId,
@@ -125,16 +149,22 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
             {dates.map((date) => {
               const entries = entriesFor(timesheets, resource._id, date);
               const dateIndex = dates.indexOf(date);
-              const isDragTarget = dragContext && 
-                                   dragContext.resourceId === resource._id && 
-                                   dateIndex > dragContext.startIndex && 
-                                   dateIndex <= dragContext.currentHoverIndex;
+              const isDragTarget = dragContext &&
+                dragContext.resourceId === resource._id &&
+                (
+                  (dragContext.currentHoverIndex > dragContext.startIndex &&
+                   dateIndex > dragContext.startIndex &&
+                   dateIndex <= dragContext.currentHoverIndex) ||
+                  (dragContext.currentHoverIndex < dragContext.startIndex &&
+                   dateIndex >= dragContext.currentHoverIndex &&
+                   dateIndex < dragContext.startIndex)
+                );
               return (
-                <div 
-                  className={`schedule-cell ${isDragTarget ? 'drag-target' : ''}`} 
-                  key={`${resource._id}-${date}`} 
-                  role="button" 
-                  tabIndex={0} 
+                <div
+                  className={`schedule-cell ${isDragTarget ? 'drag-target' : ''}`}
+                  key={`${resource._id}-${date}`}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => openCell(resource, date)}
                   onDragOver={(e) => handleDragOver(e, date, resource._id)}
                   onDrop={(e) => handleDrop(e, date, resource._id)}
@@ -143,7 +173,7 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
                   {entries.map((entry) => (
                     <span className={`time-block ${entry.leaveType ? 'time-off' : colorClass(entry.projectId?.name)}`} key={entry._id} onClick={(event) => { event.stopPropagation(); openCell(resource, date, entry); }}>
                       <div className="custom-tooltip">
-                        {entry.leaveType ? `Leave: ${entry.leaveType}` : `Project: ${entry.projectId?.name}`}<br />
+                        {entry.leaveType ? `Leave: ${entry.leaveType}` : `${entry.projectId?.name}`}<br />
                         Hours: {entry.hoursWorked}h/day<br />
                         {entry.comments && <span>Comments: {entry.comments}</span>}
                       </div>
@@ -160,13 +190,21 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
                       </button>
                       <strong>{entry.leaveType ? entry.leaveType : entry.projectId?.name}</strong>
                       <small>{entry.hoursWorked}h per day</small>
-                      <div 
-                        className="drag-handle" 
-                        draggable 
-                        onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, entry, date, resource._id); }}
+                      <div
+                        className="drag-handle drag-handle-left"
+                        draggable
+                        onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, entry, date, resource._id, 'backward'); }}
                         onDragEnd={() => setDragContext(null)}
                         onClick={(e) => e.stopPropagation()}
-                        title="Drag to copy to next days"
+                        title="Drag left to copy to previous days"
+                      />
+                      <div
+                        className="drag-handle drag-handle-right"
+                        draggable
+                        onDragStart={(e) => { e.stopPropagation(); handleDragStart(e, entry, date, resource._id, 'forward'); }}
+                        onDragEnd={() => setDragContext(null)}
+                        onClick={(e) => e.stopPropagation()}
+                        title="Drag right to copy to next days"
                       />
                     </span>
                   ))}
@@ -186,7 +224,7 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
                 <h2>{selectedCell.entryId ? 'Edit Time' : 'Add Time'}</h2>
                 <p>{selectedCell.resource.name}</p>
               </div>
-              <button className="secondary icon-button" type="button" onClick={() => setSelectedCell(null)}>
+              <button className="secondary icon-button" type="button" onClick={() => !isSubmitting && setSelectedCell(null)} disabled={isSubmitting}>
                 <X size={16} />
               </button>
             </div>
@@ -204,11 +242,11 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
                 }}
                 options={[
                   { value: '', label: 'Project / Leave Type' },
-                  { value: 'TWT', label: '🍂 Leave: TWT (Time Without Time)' },
-                  { value: 'SL', label: '🤒 Leave: SL (Sick Leave)' },
-                  { value: 'CL', label: '🏖️ Leave: CL (Casual Leave)' },
-                  { value: 'PL', label: '💼 Leave: PL (Privilege Leave)' },
-                  ...projects.map((project) => ({ value: project._id, label: `📁 Project: ${project.name}` }))
+                  { value: 'TWT', label: 'Leave: TWT (Time Without Time)' },
+                  { value: 'SL', label: 'Leave: SL (Sick Leave)' },
+                  { value: 'CL', label: 'Leave: CL (Casual Leave)' },
+                  { value: 'PL', label: 'Leave: PL (Privilege Leave)' },
+                  ...projects.map((project) => ({ value: project._id, label: `${project.name}` }))
                 ]}
                 placeholder="Project / Leave Type"
               />
@@ -226,18 +264,27 @@ export default function TimesheetForm({ resources, projects, timesheets, dates, 
                 value={form.comments}
                 onChange={(event) => setForm({ ...form, comments: event.target.value })}
                 rows="3"
-                style={{ 
-                  width: '100%', 
-                  padding: '12px', 
-                  border: '1px solid var(--line)', 
-                  borderRadius: 'var(--radius-sm)', 
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid var(--line)',
+                  borderRadius: 'var(--radius-sm)',
                   background: 'var(--surface-strong)',
                   color: 'var(--ink)',
-                  outline: 'none', 
-                  resize: 'vertical' 
+                  outline: 'none',
+                  resize: 'vertical'
                 }}
               ></textarea>
-              <button type="submit">Save Time</button>
+              <button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={16} className="spinner" />
+                    <span>Saving Time...</span>
+                  </>
+                ) : (
+                  <span>Save Time</span>
+                )}
+              </button>
             </form>
           </div>
         </div>

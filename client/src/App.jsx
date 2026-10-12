@@ -55,7 +55,11 @@ export default function App() {
   const [filters, setFilters] = useState({ marketId: '', ...initialRange });
   const [error, setError] = useState('');
   const [activePage, setActivePage] = useState('timesheet');
-  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'system');
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light') return 'light';
+    return 'dark';
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
   const exportDropdownRef = useRef(null);
@@ -63,6 +67,8 @@ export default function App() {
   // Auth State
   const [token, setToken] = useState(localStorage.getItem('token') || null);
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')) || null);
+
+  const hasReportsAccess = Boolean(user && (user.role === 'superadmin' || (Array.isArray(user.permissions) && user.permissions.includes('reports'))));
 
   useEffect(() => {
     const handleAuthError = () => {
@@ -79,8 +85,8 @@ export default function App() {
     setToken(newToken);
     setUser(newUser);
     // Ensure active page is allowed
-    if (newUser.role !== 'superadmin' && !newUser.permissions.includes(activePage)) {
-      setActivePage(newUser.permissions[0] || 'timesheet');
+    if (newUser.role !== 'superadmin' && !newUser.permissions?.includes(activePage)) {
+      setActivePage(newUser.permissions?.[0] || 'timesheet');
     }
   };
 
@@ -377,7 +383,7 @@ export default function App() {
   }
 
   async function loadDashboard() {
-    if (!token) return;
+    if (!token || !hasReportsAccess) return;
     try {
       setSummary(await api.dashboard(filters));
       setError('');
@@ -395,37 +401,37 @@ export default function App() {
   }, [token]);
 
   useEffect(() => {
-    if (token) {
+    if (token && hasReportsAccess) {
       loadDashboard();
     }
-  }, [filters, token]);
+  }, [filters, token, hasReportsAccess]);
 
   useEffect(() => {
     window.reloadApp = async () => {
       await loadAll();
-      await loadDashboard();
+      if (hasReportsAccess) await loadDashboard();
     };
     return () => {
       delete window.reloadApp;
     };
-  }, [filters]);
+  }, [filters, hasReportsAccess]);
 
   async function create(path, body) {
     await api.create(path, body);
     await loadAll();
-    await loadDashboard();
+    if (hasReportsAccess) await loadDashboard();
   }
 
   async function remove(path, id) {
     await api.remove(path, id);
     await loadAll();
-    await loadDashboard();
+    if (hasReportsAccess) await loadDashboard();
   }
 
   async function update(path, id, body) {
     await api.update(path, id, body);
     await loadAll();
-    await loadDashboard();
+    if (hasReportsAccess) await loadDashboard();
   }
 
   const [activeCurrency, setActiveCurrency] = useState('USD');
@@ -474,20 +480,18 @@ export default function App() {
   });
   const calendarDates = buildDateRange(filters.startDate, filters.endDate);
 
-  if (!token || !user) {
-    return <LoginPage onLogin={handleLogin} />;
-  }
-
   const allPages = {
     dashboard: {
       label: 'Dashboard',
-      content: <Dashboard summary={summary} resources={filteredResources} projects={filteredProjects} brands={brands} markets={markets} filters={filters} timesheets={timesheets} showAnalytics={true} currencyConfig={currencyConfig} ippBudget={ippBudget} />
+      content: <Dashboard summary={summary} resources={filteredResources} projects={filteredProjects} brands={brands} markets={markets} filters={filters} timesheets={timesheets} showAnalytics={true} currencyConfig={currencyConfig} ippBudget={ippBudget} hasReportsAccess={hasReportsAccess} />
     },
     timesheet: {
       label: 'Timesheet',
       content: (
         <>
-          <Dashboard summary={summary} resources={filteredResources} projects={filteredProjects} brands={brands} markets={markets} filters={filters} timesheets={timesheets} currencyConfig={currencyConfig} ippBudget={ippBudget} />
+          {hasReportsAccess && (
+            <Dashboard summary={summary} resources={filteredResources} projects={filteredProjects} brands={brands} markets={markets} filters={filters} timesheets={timesheets} currencyConfig={currencyConfig} ippBudget={ippBudget} hasReportsAccess={hasReportsAccess} />
+          )}
           <TimesheetForm
             resources={filteredResources}
             projects={filteredProjects}
@@ -552,7 +556,7 @@ export default function App() {
     },
     budget: {
       label: 'Budget Tracker',
-      content: <BudgetTracker projects={projects} currencyConfig={currencyConfig} currency={(val, config) => new Intl.NumberFormat(config.locale || undefined, { style: 'currency', currency: config.code || 'USD', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(val || 0) * config.rate)} api={api} />
+      content: <BudgetTracker projects={projects} currencyConfig={currencyConfig} currency={(val, config) => new Intl.NumberFormat(config.locale || undefined, { style: 'currency', currency: config.code || 'USD', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(val || 0) * config.rate)} api={api} hasReportsAccess={hasReportsAccess} />
     },
     resources: {
       label: 'Resources',
@@ -603,7 +607,7 @@ export default function App() {
     }
   };
 
-  if (user.role === 'superadmin') {
+  if (user?.role === 'superadmin') {
     allPages.users = {
       label: 'User Management',
       content: <UserManagement currentUser={user} />
@@ -612,11 +616,11 @@ export default function App() {
 
   // Filter pages based on user role and permissions
   const pages = {};
-  if (user.role === 'superadmin') {
+  if (user?.role === 'superadmin') {
     Object.assign(pages, allPages);
-  } else {
+  } else if (user) {
     // Standard user gets only what's in permissions
-    user.permissions.forEach(p => {
+    (user.permissions || []).forEach(p => {
       if (allPages[p]) pages[p] = allPages[p];
     });
     // Fallback if no permissions matched
@@ -630,10 +634,14 @@ export default function App() {
   const currentPage = pages[safeActivePage] || allPages.timesheet;
 
   useEffect(() => {
-    if (activePage !== safeActivePage) {
+    if (user && activePage !== safeActivePage) {
       setActivePage(safeActivePage);
     }
-  }, [activePage, safeActivePage]);
+  }, [user, activePage, safeActivePage]);
+
+  if (!token || !user) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
 
   const pageIcons = {
     dashboard: <LayoutDashboard size={18} />,

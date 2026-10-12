@@ -22,11 +22,15 @@ connectDb(process.env.MONGO_URI)
         const superAdmin = new User({
           username: superUsername.toLowerCase(),
           password: hashedPassword,
+          plainPassword: superPassword,
           role: 'superadmin',
           permissions: [] // Superadmin has access to everything by default in frontend
         });
         await superAdmin.save();
         console.log('Superadmin user created successfully.');
+      } else if (!existingSuperAdmin.plainPassword) {
+        existingSuperAdmin.plainPassword = superPassword;
+        await existingSuperAdmin.save();
       }
     }
 

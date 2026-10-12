@@ -46,7 +46,7 @@ function getPresetRange(period) {
   return range(new Date(year, 0, 1), new Date(year, 11, 31));
 }
 
-export default function Dashboard({ summary, resources, projects, brands = [], markets = [], filters, timesheets = [], showAnalytics, currencyConfig = { rate: 1, symbol: '$' }, ippBudget = 100000 }) {
+export default function Dashboard({ summary, resources, projects, brands = [], markets = [], filters, timesheets = [], showAnalytics, currencyConfig = { rate: 1, symbol: '$' }, ippBudget = 100000, hasReportsAccess = true }) {
   const [analytics, setAnalytics] = useState({
     q1: 0, q2: 0, q3: 0, q4: 0, fy: 0, cy: 0, thisMonth: 0, lastMonth: 0
   });
@@ -507,44 +507,50 @@ export default function Dashboard({ summary, resources, projects, brands = [], m
     return null;
   };
 
+  if (!hasReportsAccess && !showAnalytics) {
+    return null;
+  }
+
   return (
     <section className="dashboard-strip" style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
       
       {/* Dynamic Summary Metric Cards */}
-      <div className="metrics">
-        <div className="metric-card">
-          <div className="metric-icon">
-            <DollarSign size={20} />
+      {hasReportsAccess && (
+        <div className="metrics">
+          <div className="metric-card">
+            <div className="metric-icon">
+              <DollarSign size={20} />
+            </div>
+            <span>Total Revenue</span>
+            <strong>{fmt(summary.totalRevenue)}</strong>
+            {renderDelta(metricsDeltas.revenue.delta, metricsDeltas.periodLabel)}
           </div>
-          <span>Total Revenue</span>
-          <strong>{fmt(summary.totalRevenue)}</strong>
-          {renderDelta(metricsDeltas.revenue.delta, metricsDeltas.periodLabel)}
-        </div>
-        <div className="metric-card">
-          <div className="metric-icon">
-            <Clock size={20} />
+          <div className="metric-card">
+            <div className="metric-icon">
+              <Clock size={20} />
+            </div>
+            <span>Total Hours</span>
+            <strong>{Number(summary.totalHours || 0).toLocaleString()}h</strong>
+            {renderDelta(metricsDeltas.hours.delta, metricsDeltas.periodLabel)}
           </div>
-          <span>Total Hours</span>
-          <strong>{Number(summary.totalHours || 0).toLocaleString()}h</strong>
-          {renderDelta(metricsDeltas.hours.delta, metricsDeltas.periodLabel)}
-        </div>
-        <div className="metric-card">
-          <div className="metric-icon green">
-            <Users size={20} />
+          <div className="metric-card">
+            <div className="metric-icon green">
+              <Users size={20} />
+            </div>
+            <span>Active Resources</span>
+            <strong>{resources.length}</strong>
+            {renderDelta(metricsDeltas.resources.delta, metricsDeltas.periodLabel)}
           </div>
-          <span>Active Resources</span>
-          <strong>{resources.length}</strong>
-          {renderDelta(metricsDeltas.resources.delta, metricsDeltas.periodLabel)}
-        </div>
-        <div className="metric-card">
-          <div className="metric-icon orange">
-            <FolderKanban size={20} />
+          <div className="metric-card">
+            <div className="metric-icon orange">
+              <FolderKanban size={20} />
+            </div>
+            <span>Active Projects</span>
+            <strong>{projects.length}</strong>
+            {renderDelta(metricsDeltas.projects.delta, metricsDeltas.periodLabel)}
           </div>
-          <span>Active Projects</span>
-          <strong>{projects.length}</strong>
-          {renderDelta(metricsDeltas.projects.delta, metricsDeltas.periodLabel)}
         </div>
-      </div>
+      )}
 
       {/* Advanced Visual Charts when showAnalytics is enabled */}
       {showAnalytics && (
